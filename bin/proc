@@ -2,13 +2,9 @@
 
 protocol=$1
 mode="release"
-
-# features="prof"
-# tracer_show_interval="--tracer_show_interval 10000"
 features="amortize"
-tracer_show_interval=""
 
-common_args="${tracer_show_interval} --processes 3 --faults 1 --workers 1 --executors 1 --multiplexing 1 --tcp_buffer_size 0 --shards 1 --shard_id 0"
+common_args="--processes 3 --faults 1 --workers 1 --executors 1 --multiplexing 1 --tcp_buffer_size 0 --shards 1 --shard_id 0"
 
 
 # build binary

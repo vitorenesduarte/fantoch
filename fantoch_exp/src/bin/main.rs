@@ -42,7 +42,6 @@ const EXECUTOR_CLEANUP_INTERVAL: Duration = Duration::from_millis(10);
 const EXECUTOR_MONITOR_PENDING_INTERVAL: Option<Duration> = None;
 const GC_INTERVAL: Option<Duration> = Some(Duration::from_millis(50));
 const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
-const TRACER_SHOW_INTERVAL: Option<Duration> = None;
 
 // clients config
 const COMMANDS_PER_CLIENT_WAN: usize = 500;
@@ -951,7 +950,6 @@ async fn run_bench(
         testbed,
         planet,
         configs,
-        TRACER_SHOW_INTERVAL,
         clients_per_region,
         workloads,
         batch_max_size,

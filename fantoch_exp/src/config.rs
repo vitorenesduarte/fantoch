@@ -51,8 +51,6 @@ const CLIENT_STACK_SIZE: Option<usize> = None; // default is 8MB
 #[cfg(feature = "exp")]
 const EXECUTION_LOG: Option<String> = None;
 #[cfg(feature = "exp")]
-const TRACER_SHOW_INTERVAL: Option<Duration> = None;
-#[cfg(feature = "exp")]
 const PING_INTERVAL: Option<Duration> = Some(Duration::from_millis(500));
 
 #[cfg(feature = "exp")]
@@ -81,7 +79,6 @@ pub struct ProtocolConfig {
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<Duration>,
     ping_interval: Option<Duration>,
     metrics_file: String,
     stack_size: Option<usize>,
@@ -120,17 +117,12 @@ impl ProtocolConfig {
             executors,
             multiplexing: MULTIPLEXING,
             execution_log: EXECUTION_LOG,
-            tracer_show_interval: TRACER_SHOW_INTERVAL,
             ping_interval: PING_INTERVAL,
             metrics_file,
             stack_size: PROCESS_STACK_SIZE,
             cpus,
             log_file,
         }
-    }
-
-    pub fn set_tracer_show_interval(&mut self, interval: Duration) {
-        self.tracer_show_interval = Some(interval);
     }
 
     pub fn to_args(&self) -> Vec<String> {
@@ -225,9 +217,6 @@ impl ProtocolConfig {
         ]);
         if let Some(log) = &self.execution_log {
             args.extend(args!["--execution_log", log]);
-        }
-        if let Some(interval) = self.tracer_show_interval {
-            args.extend(args!["--tracer_show_interval", interval.as_millis()]);
         }
         if let Some(interval) = self.ping_interval {
             args.extend(args!["--ping_interval", interval.as_millis()]);

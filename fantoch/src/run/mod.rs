@@ -112,7 +112,6 @@ pub async fn process<P, A>(
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<Duration>,
     ping_interval: Option<Duration>,
     metrics_file: Option<String>,
 ) -> Result<(), Report>
@@ -141,7 +140,6 @@ where
         executors,
         multiplexing,
         execution_log,
-        tracer_show_interval,
         ping_interval,
         metrics_file,
         semaphore,
@@ -169,7 +167,6 @@ async fn process_with_notify_and_inspect<P, A, R>(
     executors: usize,
     multiplexing: usize,
     execution_log: Option<String>,
-    tracer_show_interval: Option<Duration>,
     ping_interval: Option<Duration>,
     metrics_file: Option<String>,
     connected: Arc<Semaphore>,
@@ -199,9 +196,6 @@ where
     if !P::leaderless() && config.leader().is_none() {
         panic!("running leader-based protocol without a leader");
     }
-
-    // (maybe) start tracer
-    task::spawn(task::server::tracer::tracer_task(tracer_show_interval));
 
     // check ports are different
     assert!(port != client_port);
@@ -541,7 +535,6 @@ pub mod tests {
         let clients_per_process = 3;
         let workers = 2;
         let executors = 2;
-        let tracer_show_interval = Some(Duration::from_secs(1));
         let tracing_directives = Some("fantoch=trace");
         let extra_run_time = Some(Duration::from_secs(5));
 
@@ -554,7 +547,6 @@ pub mod tests {
                     clients_per_process,
                     workers,
                     executors,
-                    tracer_show_interval,
                     tracing_directives,
                     Some(inspect_stable_commands),
                     extra_run_time,
@@ -588,7 +580,6 @@ pub mod tests {
         clients_per_process: usize,
         workers: usize,
         executors: usize,
-        tracer_show_interval: Option<Duration>,
         tracing_directives: Option<&'static str>,
         inspect_fun: Option<fn(&P) -> R>,
         extra_run_time: Option<Duration>,
@@ -775,7 +766,6 @@ pub mod tests {
                     executors,
                     multiplexing,
                     execution_log,
-                    tracer_show_interval,
                     ping_interval,
                     Some(metrics_file),
                     semaphore.clone(),

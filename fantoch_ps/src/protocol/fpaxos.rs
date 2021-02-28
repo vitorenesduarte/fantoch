@@ -164,7 +164,6 @@ impl Protocol for FPaxos {
 
 impl FPaxos {
     /// Handles a submit operation by a client.
-    // #[instrument(skip(self, _dot, cmd))]
     fn handle_submit(&mut self, _dot: Option<Dot>, cmd: Command) {
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
@@ -192,7 +191,6 @@ impl FPaxos {
         }
     }
 
-    // #[instrument(skip(self, ballot, slot, cmd, _time))]
     fn handle_mspawn_commander(
         &mut self,
         from: ProcessId,
@@ -234,7 +232,6 @@ impl FPaxos {
         }
     }
 
-    // #[instrument(skip(self, ballot, slot, cmd, _time))]
     fn handle_maccept(
         &mut self,
         from: ProcessId,
@@ -276,7 +273,6 @@ impl FPaxos {
         }
     }
 
-    // #[instrument(skip(self, ballot, slot, _time))]
     fn handle_maccepted(
         &mut self,
         from: ProcessId,
@@ -314,7 +310,6 @@ impl FPaxos {
         }
     }
 
-    // #[instrument(skip(self, slot, cmd, _time))]
     fn handle_mchosen(&mut self, slot: u64, cmd: Command, _time: &dyn SysTime) {
         trace!(
             "p{}: MCommit({:?}, {:?}) | time={}",
@@ -341,7 +336,6 @@ impl FPaxos {
         self.bp.config.gc_interval().is_some()
     }
 
-    // #[instrument(skip(self, from, committed, _time))]
     fn handle_mgc(
         &mut self,
         from: ProcessId,
@@ -362,7 +356,6 @@ impl FPaxos {
         self.bp.stable(stable_count);
     }
 
-    // #[instrument(skip(self, _time))]
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
         trace!(
             "p{}: PeriodicEvent::GarbageCollection | time={}",

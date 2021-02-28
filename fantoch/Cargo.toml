@@ -10,7 +10,6 @@ license = "MIT/Apache-2.0"
 default = ["run"]
 run = ["tokio", "tokio-util"]
 amortize = ["griddle"]
-prof = []
 max_level_debug = []
 max_level_trace = []
 
@@ -36,4 +35,6 @@ tracing-appender = "0.1.1"
 tracing-subscriber = "0.2.15"
 zipf = "7.0.0"
 
-fantoch_prof = { path = "../fantoch_prof" }
+[dev-dependencies]
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"

@@ -3,13 +3,13 @@ use crate::command::{Command, CommandResult};
 use crate::config::Config;
 use crate::executor::{ExecutionOrderMonitor, Executor, ExecutorMetrics};
 use crate::id::{ClientId, ProcessId, ShardId};
+use crate::metrics::Histogram;
 use crate::planet::{Planet, Region};
 use crate::protocol::{Action, Protocol, ProtocolMetrics};
 use crate::sim::{Schedule, Simulation};
 use crate::time::SysTime;
 use crate::util;
 use crate::HashMap;
-use fantoch_prof::metrics::Histogram;
 use rand::Rng;
 use std::fmt;
 use std::fmt::Debug;
@@ -717,8 +717,8 @@ impl<Message: Debug, PeriodicEvent: Debug> fmt::Debug
 mod tests {
     use super::*;
     use crate::client::KeyGen;
+    use crate::metrics::F64;
     use crate::protocol::{Basic, ProtocolMetricsKind};
-    use fantoch_prof::metrics::F64;
 
     fn run(f: usize, clients_per_process: usize) -> (Histogram, Histogram) {
         // planet

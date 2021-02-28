@@ -10,8 +10,8 @@ pub mod search;
 // Re-exports.
 pub use search::{FTMetric, RankingParams, Search, SearchInput};
 
+use fantoch::metrics::{Histogram, Stats};
 use fantoch::planet::{Planet, Region};
-use fantoch_prof::metrics::{Histogram, Stats};
 
 #[derive(Debug)]
 pub struct Bote {

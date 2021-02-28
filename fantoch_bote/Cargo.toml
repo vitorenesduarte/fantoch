@@ -13,6 +13,5 @@ rayon = "1.3.1"
 serde = { version = "1.0.115", features = ["derive"] }
 
 fantoch = { path = "../fantoch" }
-fantoch_prof = { path = "../fantoch_prof" }
 
 [dev-dependencies]

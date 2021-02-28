@@ -2,11 +2,11 @@ use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::ProcessId;
+use fantoch::metrics::Histogram;
 use fantoch::planet::{Planet, Region};
 use fantoch::protocol::{Protocol, ProtocolMetrics, ProtocolMetricsKind};
 use fantoch::sim::Runner;
 use fantoch::HashMap;
-use fantoch_prof::metrics::Histogram;
 use fantoch_ps::protocol::{
     AtlasSequential, CaesarLocked, EPaxosSequential, FPaxos, NewtSequential,
 };

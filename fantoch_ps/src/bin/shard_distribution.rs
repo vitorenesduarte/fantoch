@@ -1,6 +1,6 @@
 use fantoch::client::{KeyGen, Workload};
 use fantoch::id::{ClientId, RiflGen};
-use fantoch_prof::metrics::Histogram;
+use fantoch::metrics::Histogram;
 
 fn main() {
     let n = 3;
