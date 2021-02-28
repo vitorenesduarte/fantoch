@@ -85,18 +85,18 @@ impl Executor for TableExecutor {
             } => {
                 let pending = Pending::new(rifl, cmd_key_count, ops);
                 if self.execute_at_commit {
-                    self.execute(key, std::iter::once(pending));
+                    self.try_execute(key, std::iter::once(pending));
                 } else {
                     let to_execute = self
                         .table
                         .add_attached_votes(dot, clock, &key, pending, votes);
-                    self.execute(key, to_execute);
+                    self.try_execute(key, to_execute);
                 }
             }
             TableExecutionInfo::DetachedVotes { key, votes } => {
                 if !self.execute_at_commit {
                     let to_execute = self.table.add_detached_votes(&key, votes);
-                    self.execute(key, to_execute);
+                    self.try_execute(key, to_execute);
                 }
             }
         }
@@ -120,12 +120,16 @@ impl Executor for TableExecutor {
 }
 
 impl TableExecutor {
-    fn execute<I>(&mut self, key: Key, to_execute: I)
+    fn try_execute<I>(&mut self, key: Key, to_execute: I)
     where
         I: Iterator<Item = Pending>,
     {
         to_execute.for_each(|stable| {
-            self.execute_pending(&key, stable);
+            if stable.cmd_key_count == 1 {
+                self.execute_pending(&key, stable);
+            } else {
+                todo!()
+            }
         })
     }
 
