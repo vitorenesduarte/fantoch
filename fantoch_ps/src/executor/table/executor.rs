@@ -5,10 +5,10 @@ use fantoch::executor::{
     ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
     MessageKey,
 };
+use fantoch::hash_map::{Entry, HashMap};
 use fantoch::id::{Dot, ProcessId, Rifl, ShardId};
 use fantoch::kvs::{KVOp, KVStore, Key};
 use fantoch::time::SysTime;
-use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -114,14 +114,18 @@ impl Executor for TableExecutor {
                 }
             }
             TableExecutionInfo::Stable { rifl, key } => {
-                let pending = self
-                    .pending
-                    .get_mut(&rifl)
-                    .expect("every command in stable messages must be pending");
-                pending.missing_stable_keys -= 1;
-                if pending.missing_stable_keys == 0 {
-                    let pending = self.pending.remove(&rifl).unwrap();
-                    self.execute_pending(&key, pending);
+                if let Entry::Occupied(mut pending) = self.pending.entry(rifl) {
+                    // decrease number of missing stable keys
+                    pending.get_mut().missing_stable_keys -= 1;
+
+                    if pending.get().missing_stable_keys == 0 {
+                        // if all keys are stable, remove command from pending
+                        // and execute it
+                        let pending = pending.remove();
+                        self.execute_pending(&key, pending);
+                    }
+                } else {
+                    panic!("every command in stable messages must be pending");
                 }
             }
         }
