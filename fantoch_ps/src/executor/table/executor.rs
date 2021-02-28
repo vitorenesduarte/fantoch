@@ -25,15 +25,15 @@ pub struct TableExecutor {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Pending {
     rifl: Rifl,
-    cmd_key_count: usize,
+    all_keys: Vec<Key>,
     ops: Arc<Vec<KVOp>>,
 }
 
 impl Pending {
-    pub fn new(rifl: Rifl, cmd_key_count: usize, ops: Arc<Vec<KVOp>>) -> Self {
+    pub fn new(rifl: Rifl, all_keys: Vec<Key>, ops: Arc<Vec<KVOp>>) -> Self {
         Self {
             rifl,
-            cmd_key_count,
+            all_keys,
             ops,
         }
     }
@@ -79,11 +79,11 @@ impl Executor for TableExecutor {
                 clock,
                 key,
                 rifl,
-                cmd_key_count,
+                all_keys,
                 ops,
                 votes,
             } => {
-                let pending = Pending::new(rifl, cmd_key_count, ops);
+                let pending = Pending::new(rifl, all_keys, ops);
                 if self.execute_at_commit {
                     self.try_execute(key, std::iter::once(pending));
                 } else {
@@ -125,9 +125,10 @@ impl TableExecutor {
         I: Iterator<Item = Pending>,
     {
         to_execute.for_each(|stable| {
-            if stable.cmd_key_count == 1 {
+            if stable.all_keys.len() == 1 {
                 self.execute_pending(&key, stable);
             } else {
+                // send `Stable` message to other keys/partitions
                 todo!()
             }
         })
@@ -158,7 +159,7 @@ pub enum TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        cmd_key_count: usize,
+        all_keys: Vec<Key>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     },
@@ -174,7 +175,7 @@ impl TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        cmd_key_count: usize,
+        all_keys: Vec<Key>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
@@ -183,7 +184,7 @@ impl TableExecutionInfo {
             clock,
             key,
             rifl,
-            cmd_key_count,
+            all_keys,
             ops,
             votes,
         }

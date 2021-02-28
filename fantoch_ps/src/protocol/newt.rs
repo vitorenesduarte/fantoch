@@ -585,16 +585,16 @@ impl<KC: KeyClocks> Newt<KC> {
             .as_ref()
             .expect("there should be a command payload");
         let rifl = cmd.rifl();
-        let cmd_key_count = cmd.total_key_count();
         let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
             let key_votes = votes.remove(&key).unwrap_or_default();
+            let all_keys = cmd.all_keys().cloned().collect();
             TableExecutionInfo::attached_votes(
                 dot,
                 clock,
                 key.clone(),
                 rifl,
-                cmd_key_count,
+                all_keys,
                 ops.clone(),
                 key_votes,
             )

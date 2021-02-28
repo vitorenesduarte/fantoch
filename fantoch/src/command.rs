@@ -99,6 +99,13 @@ impl Command {
             .unwrap_or_else(|| self._empty_keys.keys())
     }
 
+    /// Returns references to all the keys accessed by this command.
+    pub fn all_keys(&self) -> impl Iterator<Item = &Key> {
+        self.shard_to_ops
+            .values()
+            .flat_map(|shard_ops| shard_ops.keys())
+    }
+
     /// Returns the number of shards accessed by this command.
     pub fn shard_count(&self) -> usize {
         self.shard_to_ops.len()
