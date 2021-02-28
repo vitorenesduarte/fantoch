@@ -105,13 +105,7 @@ impl Executor for TableExecutor {
             } => {
                 let pending = Pending::new(rifl, remaining_keys, ops);
                 if self.execute_at_commit {
-                    Self::execute(
-                        key,
-                        pending,
-                        &mut self.store,
-                        &mut self.monitor,
-                        &mut self.to_clients,
-                    );
+                    self.execute(key, pending);
                 } else {
                     let to_execute = self
                         .table
@@ -173,7 +167,7 @@ impl TableExecutor {
                         // if all keys are stable, remove command from pending
                         // and execute it
                         let pending = pending_at_key.pop_front().unwrap();
-                        Self::execute(
+                        Self::do_execute(
                             key.clone(),
                             pending,
                             &mut self.store,
@@ -266,7 +260,7 @@ impl TableExecutor {
     ) -> Option<Pending> {
         if pending.missing_stable_keys == 0 {
             // if the command is single-key, execute immediately
-            Self::execute(key.clone(), pending, store, monitor, to_clients);
+            Self::do_execute(key.clone(), pending, store, monitor, to_clients);
             None
         } else {
             // otherwise, send a `Stable` message to each of the other
@@ -293,7 +287,13 @@ impl TableExecutor {
             if pending.missing_stable_keys == 0 {
                 // if the command is already stable at all keys/partitions, then
                 // execute it
-                Self::execute(key.clone(), pending, store, monitor, to_clients);
+                Self::do_execute(
+                    key.clone(),
+                    pending,
+                    store,
+                    monitor,
+                    to_clients,
+                );
                 None
             } else {
                 // in this case, the command cannot be execute; so send it back
@@ -303,7 +303,17 @@ impl TableExecutor {
         }
     }
 
-    fn execute(
+    fn execute(&mut self, key: Key, stable: Pending) {
+        Self::do_execute(
+            key,
+            stable,
+            &mut self.store,
+            &mut self.monitor,
+            &mut self.to_clients,
+        )
+    }
+
+    fn do_execute(
         key: Key,
         stable: Pending,
         store: &mut KVStore,
