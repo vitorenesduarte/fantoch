@@ -25,7 +25,7 @@ pub struct TableExecutor {
     to_clients: VecDeque<ExecutorResult>,
     to_executors: Vec<(ShardId, TableExecutionInfo)>,
     pending: HashMap<Key, VecDeque<Pending>>,
-    buffered_stable_msgs: HashMap<(Key, Rifl), usize>,
+    buffered_stable_msgs: HashMap<Key, HashMap<Rifl, usize>>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -148,6 +148,10 @@ impl Executor for TableExecutor {
 
 impl TableExecutor {
     fn handle_stable_msg(&mut self, key: Key, rifl: Rifl) {
+        // get buffered stable msgs on this key
+        let mut buffered =
+            self.buffered_stable_msgs.entry(key.clone()).or_default();
+
         trace!("p{}: key={} Stable {:?}", self.process_id, key, rifl);
         if let Some(pending_at_key) = self.pending.get_mut(&key) {
             if let Some(pending) = pending_at_key.get_mut(0) {
@@ -184,7 +188,7 @@ impl TableExecutor {
                                 &mut self.monitor,
                                 &mut self.to_clients,
                                 &mut self.to_executors,
-                                &mut self.buffered_stable_msgs,
+                                &mut buffered,
                             );
                             if let Some(pending) = try_result {
                                 // if this command cannot be executed, buffer it
@@ -200,8 +204,7 @@ impl TableExecutor {
 
         // if we reach here, then the command on this message is not yet
         // stable locally; in this case, we buffer this message
-        let composite_key = (key, rifl);
-        *self.buffered_stable_msgs.entry(composite_key).or_default() += 1;
+        *buffered.entry(rifl).or_default() += 1;
     }
 
     fn try_execute<I>(&mut self, key: Key, mut to_execute: I)
@@ -216,6 +219,10 @@ impl TableExecutor {
                 return;
             }
         }
+
+        // get buffered stable msgs on this key
+        let mut buffered_stable_msgs =
+            self.buffered_stable_msgs.entry(key.clone()).or_default();
 
         // execute commands while no command is added as pending
         while let Some(pending) = to_execute.next() {
@@ -233,7 +240,7 @@ impl TableExecutor {
                 &mut self.monitor,
                 &mut self.to_clients,
                 &mut self.to_executors,
-                &mut self.buffered_stable_msgs,
+                &mut buffered_stable_msgs,
             );
             if let Some(pending) = try_result {
                 // if this command cannot be executed, then add it (and all the
@@ -256,7 +263,7 @@ impl TableExecutor {
         monitor: &mut Option<ExecutionOrderMonitor>,
         to_clients: &mut VecDeque<ExecutorResult>,
         to_executors: &mut Vec<(ShardId, TableExecutionInfo)>,
-        buffered_stable_msgs: &mut HashMap<(Key, Rifl), usize>,
+        buffered: &mut HashMap<Rifl, usize>,
     ) -> Option<Pending> {
         if pending.missing_stable_keys == 0 {
             // if the command is single-key, execute immediately
@@ -266,10 +273,9 @@ impl TableExecutor {
             // otherwise, send a `Stable` message to each of the other
             // keys/partitions accessed by the command
 
+            // send a stable message to each of the remaining keys:
             // take `remaining_keys` as they're no longer needed
             let remaining_keys = std::mem::take(&mut pending.remaining_keys);
-
-            // send a stable message to each of the remaining keys
             let msgs =
                 remaining_keys.into_iter().map(|(shard_id, shard_key)| {
                     let msg =
@@ -279,8 +285,7 @@ impl TableExecutor {
             to_executors.extend(msgs);
 
             // check if there's any buffered stable messages
-            let composite_key = (key.clone(), pending.rifl);
-            if let Some(count) = buffered_stable_msgs.remove(&composite_key) {
+            if let Some(count) = buffered.remove(&pending.rifl) {
                 pending.missing_stable_keys -= count;
             }
 
