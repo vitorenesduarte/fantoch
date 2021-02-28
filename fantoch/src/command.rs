@@ -100,10 +100,10 @@ impl Command {
     }
 
     /// Returns references to all the keys accessed by this command.
-    pub fn all_keys(&self) -> impl Iterator<Item = &Key> {
-        self.shard_to_ops
-            .values()
-            .flat_map(|shard_ops| shard_ops.keys())
+    pub fn all_keys(&self) -> impl Iterator<Item = (&ShardId, &Key)> {
+        self.shard_to_ops.iter().flat_map(|(shard_id, shard_ops)| {
+            shard_ops.keys().map(move |key| (shard_id, key))
+        })
     }
 
     /// Returns the number of shards accessed by this command.

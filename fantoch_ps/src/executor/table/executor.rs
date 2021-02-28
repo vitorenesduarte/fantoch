@@ -25,12 +25,16 @@ pub struct TableExecutor {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Pending {
     rifl: Rifl,
-    all_keys: Vec<Key>,
+    all_keys: Vec<(ShardId, Key)>,
     ops: Arc<Vec<KVOp>>,
 }
 
 impl Pending {
-    pub fn new(rifl: Rifl, all_keys: Vec<Key>, ops: Arc<Vec<KVOp>>) -> Self {
+    pub fn new(
+        rifl: Rifl,
+        all_keys: Vec<(ShardId, Key)>,
+        ops: Arc<Vec<KVOp>>,
+    ) -> Self {
         Self {
             rifl,
             all_keys,
@@ -99,6 +103,9 @@ impl Executor for TableExecutor {
                     self.try_execute(key, to_execute);
                 }
             }
+            TableExecutionInfo::Stable { key, rifl } => {
+                todo!()
+            }
         }
     }
 
@@ -159,13 +166,17 @@ pub enum TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        all_keys: Vec<Key>,
+        all_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     },
     DetachedVotes {
         key: Key,
         votes: Vec<VoteRange>,
+    },
+    Stable {
+        key: Key,
+        rifl: Rifl,
     },
 }
 
@@ -175,11 +186,11 @@ impl TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        all_keys: Vec<Key>,
+        all_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
-        TableExecutionInfo::AttachedVotes {
+        Self::AttachedVotes {
             dot,
             clock,
             key,
@@ -191,15 +202,20 @@ impl TableExecutionInfo {
     }
 
     pub fn detached_votes(key: Key, votes: Vec<VoteRange>) -> Self {
-        TableExecutionInfo::DetachedVotes { key, votes }
+        Self::DetachedVotes { key, votes }
+    }
+
+    pub fn stable(key: Key, rifl: Rifl) -> Self {
+        Self::Stable { key, rifl }
     }
 }
 
 impl MessageKey for TableExecutionInfo {
     fn key(&self) -> &Key {
         match self {
-            TableExecutionInfo::AttachedVotes { key, .. } => key,
-            TableExecutionInfo::DetachedVotes { key, .. } => key,
+            Self::AttachedVotes { key, .. } => key,
+            Self::DetachedVotes { key, .. } => key,
+            Self::Stable { key, .. } => key,
         }
     }
 }
