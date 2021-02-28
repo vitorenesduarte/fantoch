@@ -169,8 +169,8 @@ impl TableExecutor {
                 );
 
                 if pending.missing_stable_keys == 0 {
-                    // if all keys are stable, remove command from pending
-                    // and execute it
+                    // if all keys are stable, remove command from pending and
+                    // execute it
                     let pending = pending_per_key.pending.pop_front().unwrap();
                     Self::do_execute(
                         key.clone(),
@@ -194,19 +194,23 @@ impl TableExecutor {
                             &mut pending_per_key.buffered,
                         );
                         if let Some(pending) = try_result {
-                            // if this command cannot be executed, buffer it
-                            // and give up trying to execute more commands
+                            // if this command cannot be executed, buffer it and
+                            // give up trying to execute more commands
                             pending_per_key.pending.push_front(pending);
                             return;
                         }
                     }
                 }
+            } else {
+                // in this case, the command on this message is not yet
+                // stable locally; in this case, we buffer this message
+                *pending_per_key.buffered.entry(rifl).or_default() += 1;
             }
+        } else {
+            // in this case, the command on this message is not yet stable
+            // locally; in this case, we buffer this message
+            *pending_per_key.buffered.entry(rifl).or_default() += 1;
         }
-
-        // if we reach here, then the command on this message is not yet
-        // stable locally; in this case, we buffer this message
-        *pending_per_key.buffered.entry(rifl).or_default() += 1;
     }
 
     fn try_execute<I>(&mut self, key: Key, mut to_execute: I)
@@ -267,9 +271,7 @@ impl TableExecutor {
             None
         } else {
             // otherwise, send a `Stable` message to each of the other
-            // keys/partitions accessed by the command
-
-            // send a stable message to each of the remaining keys:
+            // keys/partitions accessed by the command;
             // take `remaining_keys` as they're no longer needed
             let remaining_keys = std::mem::take(&mut pending.remaining_keys);
             let msgs =
@@ -321,8 +323,8 @@ impl TableExecutor {
         monitor: &mut Option<ExecutionOrderMonitor>,
         to_clients: &mut VecDeque<ExecutorResult>,
     ) {
-        // take the ops inside the arc if we're the last with a
-        // reference to it (otherwise, clone them)
+        // take the ops inside the arc if we're the last with a reference to it
+        // (otherwise, clone them)
         let rifl = stable.rifl;
         let ops = stable.ops;
         let ops =
