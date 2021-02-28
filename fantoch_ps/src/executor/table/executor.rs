@@ -124,26 +124,27 @@ impl TableExecutor {
     where
         I: Iterator<Item = Pending>,
     {
-        to_execute.for_each(|pending| {
-            // take the ops inside the arc if we're the last with a
-            // reference to it (otherwise, clone them)
-            let rifl = pending.rifl;
-            let ops = pending.ops;
-            let ops =
-                Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
-            // execute ops in the `KVStore`
-            let partial_results = self.store.execute_with_monitor(
-                &key,
-                ops,
-                rifl,
-                &mut self.monitor,
-            );
-            self.to_clients.push_back(ExecutorResult::new(
-                rifl,
-                key.clone(),
-                partial_results,
-            ));
+        to_execute.for_each(|stable| {
+            self.execute_pending(&key, stable);
         })
+    }
+
+    fn execute_pending(&mut self, key: &Key, stable: Pending) {
+        // take the ops inside the arc if we're the last with a
+        // reference to it (otherwise, clone them)
+        let rifl = stable.rifl;
+        let ops = stable.ops;
+        let ops =
+            Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
+        // execute ops in the `KVStore`
+        let partial_results =
+            self.store
+                .execute_with_monitor(key, ops, rifl, &mut self.monitor);
+        self.to_clients.push_back(ExecutorResult::new(
+            rifl,
+            key.clone(),
+            partial_results,
+        ));
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
