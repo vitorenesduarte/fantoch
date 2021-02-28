@@ -113,13 +113,13 @@ impl Executor for TableExecutor {
                     let to_execute = self
                         .table
                         .add_attached_votes(dot, clock, &key, pending, votes);
-                    self.try_execute(key, to_execute);
+                    self.send_stable_or_execute(key, to_execute);
                 }
             }
             TableExecutionInfo::DetachedVotes { key, votes } => {
                 if !self.execute_at_commit {
                     let to_execute = self.table.add_detached_votes(&key, votes);
-                    self.try_execute(key, to_execute);
+                    self.send_stable_or_execute(key, to_execute);
                 }
             }
             TableExecutionInfo::Stable { key, rifl } => {
@@ -184,7 +184,7 @@ impl TableExecutor {
                     while let Some(pending) =
                         pending_per_key.pending.pop_front()
                     {
-                        let try_result = Self::try_execute_single(
+                        let try_result = Self::send_stable_or_execute_single(
                             &key,
                             pending,
                             &mut self.store,
@@ -213,7 +213,7 @@ impl TableExecutor {
         }
     }
 
-    fn try_execute<I>(&mut self, key: Key, mut to_execute: I)
+    fn send_stable_or_execute<I>(&mut self, key: Key, mut to_execute: I)
     where
         I: Iterator<Item = Pending>,
     {
@@ -234,7 +234,7 @@ impl TableExecutor {
                 pending.rifl,
                 pending.missing_stable_keys
             );
-            let try_result = Self::try_execute_single(
+            let try_result = Self::send_stable_or_execute_single(
                 &key,
                 pending,
                 &mut self.store,
@@ -256,7 +256,7 @@ impl TableExecutor {
     }
 
     #[must_use]
-    fn try_execute_single(
+    fn send_stable_or_execute_single(
         key: &Key,
         mut pending: Pending,
         store: &mut KVStore,
