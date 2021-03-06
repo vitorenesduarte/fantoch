@@ -94,6 +94,6 @@ impl PredecessorsExecutionInfo {
 
 impl MessageIndex for PredecessorsExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        None
+        Some((0, self.dot.sequence() as usize))
     }
 }

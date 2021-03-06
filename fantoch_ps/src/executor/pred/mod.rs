@@ -246,10 +246,16 @@ impl PredecessorsGraph {
                 );
                 // get the dependency and check its clock to see if it should be
                 // consider
-                let dep_ref = self
-                    .vertex_index
-                    .find(&dep_dot)
-                    .expect("non-executed dependency must exist");
+                let dep_ref = if let Some(dep_ref) =
+                    self.vertex_index.find(&dep_dot)
+                {
+                    dep_ref
+                } else {
+                    panic!(
+                        "p{}: Predecessors::move_2 non-executed dependency {:?} of {:?} must exist",
+                        self.process_id, dep_dot, dot,
+                    );
+                };
                 let dep = dep_ref.borrow();
 
                 // only consider this dep if it has a lower clock
