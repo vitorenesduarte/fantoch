@@ -2,9 +2,11 @@ use crate::protocol::common::pred::Clock;
 use fantoch::command::Command;
 use fantoch::hash_map::HashMap;
 use fantoch::id::{Dot, ProcessId};
+use fantoch::shared::{SharedMap, SharedMapRef};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -64,14 +66,14 @@ impl Vertex {
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
     process_id: ProcessId,
-    index: HashMap<Dot, RefCell<Vertex>>,
+    index: SharedMap<Dot, RefCell<Vertex>>,
 }
 
 impl VertexIndex {
     pub fn new(process_id: ProcessId) -> Self {
         Self {
             process_id,
-            index: HashMap::new(),
+            index: SharedMap::new(),
         }
     }
 
@@ -84,17 +86,20 @@ impl VertexIndex {
     }
 
     #[allow(dead_code)]
-    pub fn dots(&self) -> impl Iterator<Item = &Dot> + '_ {
-        self.index.keys()
+    pub fn dots(&self) -> BTreeSet<Dot> {
+        self.index.iter().map(|entry| *entry.key()).collect()
     }
 
-    pub fn find(&self, dot: &Dot) -> Option<&RefCell<Vertex>> {
+    pub fn find(
+        &self,
+        dot: &Dot,
+    ) -> Option<SharedMapRef<'_, Dot, RefCell<Vertex>>> {
         self.index.get(dot)
     }
 
     /// Removes a vertex from the index.
     pub fn remove(&mut self, dot: &Dot) -> Option<Vertex> {
-        self.index.remove(dot).map(|cell| cell.into_inner())
+        self.index.remove(dot).map(|(_, cell)| cell.into_inner())
     }
 }
 

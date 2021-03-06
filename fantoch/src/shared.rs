@@ -5,6 +5,9 @@ use std::collections::hash_map::RandomState;
 use std::collections::BTreeSet;
 use std::hash::Hash;
 
+// TODO: try https://docs.rs/lever/0.1.1/lever/table/lotable/struct.LOTable.html
+//       as an alternative to dashmap.
+
 pub type SharedMapIter<'a, K, V> =
     Iter<'a, K, V, RandomState, DashMap<K, V, RandomState>>;
 
@@ -26,13 +29,13 @@ where
         Self { shared }
     }
 
-    pub fn get(&self, key: &K) -> Option<Ref<'_, K, V>> {
+    pub fn get(&self, key: &K) -> Option<SharedMapRef<'_, K, V>> {
         self.shared.get(key)
     }
 
     // Tries to retrieve the current value associated with `key`. If there's no
     // associated value, an entry will be created.
-    pub fn get_or<F>(&self, key: &K, value: F) -> Ref<'_, K, V>
+    pub fn get_or<F>(&self, key: &K, value: F) -> SharedMapRef<'_, K, V>
     where
         F: Fn() -> V + Copy,
     {
