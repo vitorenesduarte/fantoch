@@ -1,11 +1,10 @@
 use crate::protocol::common::pred::Clock;
 use fantoch::command::Command;
-use fantoch::hash_map::HashMap;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::Dot;
 use fantoch::shared::{SharedMap, SharedMapRef};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
-use std::cell::RefCell;
+use parking_lot::{Mutex, RwLock};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -65,15 +64,13 @@ impl Vertex {
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
-    process_id: ProcessId,
-    index: SharedMap<Dot, RefCell<Vertex>>,
+    index: Arc<SharedMap<Dot, RwLock<Vertex>>>,
 }
 
 impl VertexIndex {
-    pub fn new(process_id: ProcessId) -> Self {
+    pub fn new() -> Self {
         Self {
-            process_id,
-            index: SharedMap::new(),
+            index: Arc::new(SharedMap::new()),
         }
     }
 
@@ -81,7 +78,7 @@ impl VertexIndex {
     pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
         let dot = vertex.dot;
         self.index
-            .insert(dot, RefCell::new(vertex))
+            .insert(dot, RwLock::new(vertex))
             .map(|cell| cell.into_inner())
     }
 
@@ -93,7 +90,7 @@ impl VertexIndex {
     pub fn find(
         &self,
         dot: &Dot,
-    ) -> Option<SharedMapRef<'_, Dot, RefCell<Vertex>>> {
+    ) -> Option<SharedMapRef<'_, Dot, RwLock<Vertex>>> {
         self.index.get(dot)
     }
 
@@ -105,23 +102,29 @@ impl VertexIndex {
 
 #[derive(Debug, Clone)]
 pub struct PendingIndex {
-    index: HashMap<Dot, HashSet<Dot>>,
+    index: Arc<SharedMap<Dot, Mutex<HashSet<Dot>>>>,
 }
 
 impl PendingIndex {
     pub fn new() -> Self {
         Self {
-            index: HashMap::new(),
+            index: Arc::new(SharedMap::new()),
         }
     }
 
     /// Indexes a new `dot` with `dep_dot` as a missing dependency.
     pub fn index(&mut self, dot: Dot, dep_dot: Dot) {
-        self.index.entry(dep_dot).or_default().insert(dot);
+        self.index
+            .get_or(&dep_dot, || Default::default())
+            .lock()
+            .insert(dot);
     }
 
     /// Finds all pending dots for a given dependency.
     pub fn remove(&mut self, dep_dot: &Dot) -> HashSet<Dot> {
-        self.index.remove(dep_dot).unwrap_or_default()
+        self.index
+            .remove(dep_dot)
+            .map(|(_, deps)| deps.into_inner())
+            .unwrap_or_default()
     }
 }

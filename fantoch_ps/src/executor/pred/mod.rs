@@ -65,7 +65,7 @@ impl PredecessorsGraph {
         let committed_clock = Arc::new(RwLock::new(AEClock::with(ids.clone())));
         let executed_clock = Arc::new(RwLock::new(AEClock::with(ids.clone())));
         // create indexes
-        let vertex_index = VertexIndex::new(process_id);
+        let vertex_index = VertexIndex::new();
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
@@ -171,7 +171,7 @@ impl PredecessorsGraph {
             .vertex_index
             .find(&dot)
             .expect("command just indexed must exist");
-        let mut vertex = vertex_ref.borrow_mut();
+        let mut vertex = vertex_ref.write();
 
         // compute number of non yet committed dependencies
         let mut non_committed_deps_count = 0;
@@ -227,7 +227,7 @@ impl PredecessorsGraph {
             .vertex_index
             .find(&dot)
             .expect("command moved to phase two must exist");
-        let mut vertex = vertex_ref.borrow_mut();
+        let mut vertex = vertex_ref.write();
 
         // compute number of yet executed dependencies
         let mut non_executed_deps_count = 0;
@@ -256,7 +256,7 @@ impl PredecessorsGraph {
                         self.process_id, dep_dot, dot,
                     );
                 };
-                let dep = dep_ref.borrow();
+                let dep = dep_ref.read();
 
                 // only consider this dep if it has a lower clock
                 if dep.clock < vertex.clock {
@@ -322,7 +322,7 @@ impl PredecessorsGraph {
                 .vertex_index
                 .find(&pending_dot)
                 .expect("command pending at phase one must exist");
-            let mut vertex = vertex_ref.borrow_mut();
+            let mut vertex = vertex_ref.write();
 
             // a non-committed dep became committed, so update the number of
             // missing deps at phase one
@@ -346,7 +346,7 @@ impl PredecessorsGraph {
                 .vertex_index
                 .find(&pending_dot)
                 .expect("command pending at phase two must exist");
-            let mut vertex = vertex_ref.borrow_mut();
+            let mut vertex = vertex_ref.write();
 
             // a non-executed dep became executed, so update the number of
             // missing deps at phase two
@@ -371,6 +371,15 @@ impl PredecessorsGraph {
             time.millis()
         );
 
+        // mark dot as executed. this must be done before removing it from the
+        // index because of the following invariant: if the command is in the
+        // committed clock but not in the executed clock, then it must be
+        // indexed
+        assert!(self
+            .executed_clock
+            .write()
+            .add(&dot.source(), dot.sequence()));
+
         // remove from vertex index
         let vertex = self
             .vertex_index
@@ -384,7 +393,7 @@ impl PredecessorsGraph {
         self.metrics
             .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
-        // mark dot as executed and add command to commands to be executed
+        // execute the command
         self.execute(dot, cmd, time);
 
         // try commands pending at phase two due to this command
@@ -398,12 +407,6 @@ impl PredecessorsGraph {
             dot,
             _time.millis()
         );
-
-        // mark dot as executed
-        assert!(self
-            .executed_clock
-            .write()
-            .add(&dot.source(), dot.sequence()));
 
         // execute the command
         let mut store = self.store.lock();
