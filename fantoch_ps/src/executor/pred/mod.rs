@@ -10,7 +10,7 @@ mod executor;
 pub use executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 
 use self::index::{PendingIndex, Vertex, VertexIndex};
-use crate::protocol::common::pred::Clock;
+use crate::protocol::common::pred::{Clock, CompressedDots};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -21,7 +21,6 @@ use fantoch::kvs::KVStore;
 use fantoch::protocol::Executed;
 use fantoch::time::SysTime;
 use fantoch::util;
-use fantoch::HashSet;
 use fantoch::{debug, trace};
 use parking_lot::{Mutex, RwLock};
 use std::collections::VecDeque;
@@ -117,7 +116,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CompressedDots>,
         time: &dyn SysTime,
     ) {
         debug!(
@@ -187,7 +186,7 @@ impl PredecessorsGraph {
                     time.millis()
                 );
                 non_committed_deps_count += 1;
-                self.phase_one_pending_index.index(dep_dot, dot);
+                self.phase_one_pending_index.index(&dep_dot, dot);
             }
         }
 
@@ -250,7 +249,7 @@ impl PredecessorsGraph {
                     time.millis()
                 );
                     non_executed_deps_count += 1;
-                    self.phase_two_pending_index.index(dep_dot, dot);
+                    self.phase_two_pending_index.index(&dep_dot, dot);
                 }
             } else {
                 // if it's not indexed, then it must be already executed
@@ -285,7 +284,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CompressedDots>,
         time: &dyn SysTime,
     ) {
         // create new vertex for this command and index it
@@ -429,8 +428,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::iter::FromIterator;
 
-    fn deps(deps: Vec<Dot>) -> Arc<HashSet<Dot>> {
-        Arc::new(HashSet::from_iter(deps))
+    fn compressed_deps(deps: Vec<Dot>) -> Arc<CompressedDots> {
+        Arc::new(CompressedDots::from_iter(deps))
     }
 
     #[test]
@@ -456,7 +455,7 @@ mod tests {
             vec![(String::from("A"), KVOp::Put(String::new()))],
         );
         let clock_0 = Clock::from(2, p1);
-        let deps_0 = deps(vec![dot_1]);
+        let deps_0 = compressed_deps(vec![dot_1]);
 
         // cmd 1
         let rifl1 = Rifl::new(2, 1);
@@ -465,7 +464,7 @@ mod tests {
             vec![(String::from("A"), KVOp::Put(String::new()))],
         );
         let clock_1 = Clock::from(1, p2);
-        let deps_1 = deps(vec![dot_0]);
+        let deps_1 = compressed_deps(vec![dot_0]);
 
         // add cmd 0
         queue.add(dot_0, cmd_0.clone(), clock_0, deps_0, &time);
@@ -494,7 +493,7 @@ mod tests {
     fn random_adds(
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CompressedDots>)> {
         let mut rng = rand::thread_rng();
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
@@ -537,7 +536,7 @@ mod tests {
                     .expect("there must be a clock for each command");
 
                 // create empty deps
-                let deps = HashSet::new();
+                let deps = CompressedDots::new();
 
                 (dot, (Some(keys), clock, RefCell::new(deps)))
             })
@@ -602,7 +601,7 @@ mod tests {
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CompressedDots>)>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -614,7 +613,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CompressedDots>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;

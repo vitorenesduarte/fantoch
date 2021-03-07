@@ -1,5 +1,5 @@
 use crate::executor::pred::PredecessorsGraph;
-use crate::protocol::common::pred::Clock;
+use crate::protocol::common::pred::{Clock, CompressedDots};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -9,7 +9,6 @@ use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{Executed, MessageIndex};
 use fantoch::time::SysTime;
 use fantoch::trace;
-use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -84,7 +83,7 @@ pub struct PredecessorsExecutionInfo {
     dot: Dot,
     cmd: Command,
     clock: Clock,
-    deps: Arc<HashSet<Dot>>,
+    deps: Arc<CompressedDots>,
 }
 
 impl PredecessorsExecutionInfo {
@@ -92,7 +91,7 @@ impl PredecessorsExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CompressedDots>,
     ) -> Self {
         Self {
             dot,

@@ -1,6 +1,7 @@
 use crate::executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 use crate::protocol::common::pred::{
-    Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
+    Clock, CompressedDots, KeyClocks, LockedKeyClocks, QuorumClocks,
+    QuorumRetries,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
@@ -32,12 +33,12 @@ pub struct Caesar<KC: KeyClocks> {
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_retries: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    buffered_retries: HashMap<Dot, (ProcessId, Clock, CompressedDots)>,
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    buffered_commits: HashMap<Dot, (ProcessId, Clock, CompressedDots)>,
     // `try_to_unblock` calls to be repeated
-    try_to_unblock_again: Vec<(Dot, Clock, Arc<HashSet<Dot>>, HashSet<Dot>)>,
+    try_to_unblock_again: Vec<(Dot, Clock, Arc<CompressedDots>, HashSet<Dot>)>,
     wait_condition: bool,
 }
 
@@ -493,7 +494,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CompressedDots,
         ok: bool,
         _time: &dyn SysTime,
     ) {
@@ -588,7 +589,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        mut deps: HashSet<Dot>,
+        mut deps: CompressedDots,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -676,7 +677,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CompressedDots,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -720,7 +721,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             self.key_clocks.predecessors(dot, cmd, clock, blocking);
 
         // aggregate with incoming deps
-        new_deps.extend(deps);
+        new_deps.merge(deps);
 
         // create message and target
         let msg = Message::MRetryAck {
@@ -745,7 +746,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: CompressedDots,
         _time: &dyn SysTime,
     ) {
         trace!(
@@ -898,7 +899,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         my_dot: Dot,
         my_clock: Clock,
         their_clock: Clock,
-        their_deps: &HashSet<Dot>,
+        their_deps: &CompressedDots,
         _time: &dyn SysTime,
     ) -> bool {
         trace!(
@@ -923,7 +924,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         dot: Dot,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CompressedDots>,
         blocking: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
@@ -1117,7 +1118,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn send_mpropose_ack(
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CompressedDots,
         ok: bool,
         to_processes: &mut Vec<Action<Self>>,
     ) {
@@ -1147,7 +1148,7 @@ struct CaesarInfo {
     // `None` if not set yet
     cmd: Option<Command>,
     clock: Clock,
-    deps: Arc<HashSet<Dot>>,
+    deps: Arc<CompressedDots>,
     // set of commands that this command is blocking
     blocking: HashSet<Dot>,
     // set of commands that this command is blocked by
@@ -1178,7 +1179,7 @@ impl Info for CaesarInfo {
             status: Status::START,
             cmd: None,
             clock: Clock::new(process_id),
-            deps: Arc::new(HashSet::new()),
+            deps: Arc::new(CompressedDots::new()),
             blocking: HashSet::new(),
             blocked_by: HashSet::new(),
             quorum_clocks: QuorumClocks::new(
@@ -1204,85 +1205,89 @@ pub enum Message {
     MProposeAck {
         dot: Dot,
         clock: Clock,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CompressedDots,
         ok: bool,
     },
     MCommit {
         dot: Dot,
         clock: Clock,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CompressedDots,
     },
     MRetry {
         dot: Dot,
         clock: Clock,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CompressedDots,
     },
     MRetryAck {
         dot: Dot,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CompressedDots,
     },
     MGarbageCollection {
         executed: VClock<ProcessId>,
     },
 }
 
-// The following is a copy of std's deserialize method for `HashSet`s
-// (see here: https://github.com/rust-lang/hashbrown/blob/83ac6fd0d364bc220f7d24cc234bc0c4ab30b3ae/src/external_trait_impls/serde.rs#L116-L162)
+// The following is a copy of std's deserialize method for `HashMap`s
+// (see here: https://github.com/rust-lang/hashbrown/blob/83ac6fd0d364bc220f7d24cc234bc0c4ab30b3ae/src/external_trait_impls/serde.rs#L39-L89)
 // with the exception of the size hint which is not cautious (see DIFF below),
 // i.e. it doesn't limit the maximum size hint size to be 4096
 // (see here: https://github.com/serde-rs/serde/blob/9a84622c5648a91674708bad14e4c54fc7ca721c/serde/src/private/size_hint.rs#L13)
-fn deserialize_deps<'de, T, D>(deserializer: D) -> Result<HashSet<T>, D::Error>
+fn deserialize_caesar_deps<'de, D>(
+    deserializer: D,
+) -> Result<CompressedDots, D::Error>
 where
-    T: Deserialize<'de> + Eq + std::hash::Hash,
     D: Deserializer<'de>,
 {
     use core::fmt;
     use core::hash::{BuildHasher, Hash};
     use core::marker::PhantomData;
-    use serde::de::{SeqAccess, Visitor};
+    use serde::de::{MapAccess, Visitor};
 
-    struct SeqVisitor<T, S> {
-        marker: PhantomData<HashSet<T, S>>,
+    struct MapVisitor<K, V, S> {
+        marker: PhantomData<HashMap<K, V, S>>,
     }
 
-    impl<'de, T, S> Visitor<'de> for SeqVisitor<T, S>
+    impl<'de, K, V, S> Visitor<'de> for MapVisitor<K, V, S>
     where
-        T: Deserialize<'de> + Eq + Hash,
+        K: Deserialize<'de> + Eq + Hash,
+        V: Deserialize<'de>,
         S: BuildHasher + Default,
     {
-        type Value = HashSet<T, S>;
+        type Value = HashMap<K, V, S>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a sequence")
+            formatter.write_str("a map")
         }
 
-        #[cfg_attr(feature = "inline-more", inline)]
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        #[inline]
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
         where
-            A: SeqAccess<'de>,
+            A: MapAccess<'de>,
         {
-            let mut values = HashSet::with_capacity_and_hasher(
+            let mut values = HashMap::with_capacity_and_hasher(
                 // DIFF
-                seq.size_hint().unwrap_or(0),
+                map.size_hint().unwrap_or(0),
                 S::default(),
             );
 
-            while let Some(value) = seq.next_element()? {
-                values.insert(value);
+            while let Some((key, value)) = map.next_entry()? {
+                values.insert(key, value);
             }
 
             Ok(values)
         }
     }
 
-    let visitor = SeqVisitor {
+    let visitor = MapVisitor {
         marker: PhantomData,
     };
-    deserializer.deserialize_seq(visitor)
+    deserializer
+        .deserialize_map(visitor)
+        .map(|deps| CompressedDots { deps })
 }
 
 impl MessageIndex for Message {

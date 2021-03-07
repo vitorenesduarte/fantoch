@@ -1,5 +1,6 @@
 use super::Clock;
-use fantoch::id::{Dot, ProcessId};
+use crate::protocol::common::pred::CompressedDots;
+use fantoch::id::ProcessId;
 use fantoch::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,7 +14,7 @@ pub struct QuorumClocks {
     // max of all `clock`s
     clock: Clock,
     // union of all predecessors
-    deps: HashSet<Dot>,
+    deps: CompressedDots,
     // and of all `ok`s
     ok: bool,
 }
@@ -30,7 +31,7 @@ impl QuorumClocks {
             write_quorum_size,
             participants: HashSet::with_capacity(fast_quorum_size),
             clock: Clock::new(process_id),
-            deps: HashSet::new(),
+            deps: CompressedDots::new(),
             ok: true,
         }
     }
@@ -40,7 +41,7 @@ impl QuorumClocks {
         &mut self,
         process_id: ProcessId,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CompressedDots,
         ok: bool,
     ) {
         assert!(self.participants.len() < self.fast_quorum_size);
@@ -50,7 +51,7 @@ impl QuorumClocks {
 
         // update clock and deps
         self.clock.join(&clock);
-        self.deps.extend(deps);
+        self.deps.merge(deps);
         self.ok = self.ok && ok;
     }
 
@@ -68,7 +69,7 @@ impl QuorumClocks {
     }
 
     /// Returns the current aggregated result.
-    pub fn aggregated(&mut self) -> (Clock, HashSet<Dot>, bool) {
+    pub fn aggregated(&mut self) -> (Clock, CompressedDots, bool) {
         // resets `this.deps` so that it can be returned without having to clone
         // it
         let deps = std::mem::take(&mut self.deps);
@@ -83,7 +84,7 @@ pub struct QuorumRetries {
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
     // union of all predecessors
-    deps: HashSet<Dot>,
+    deps: CompressedDots,
 }
 
 impl QuorumRetries {
@@ -92,17 +93,17 @@ impl QuorumRetries {
         Self {
             write_quorum_size,
             participants: HashSet::with_capacity(write_quorum_size),
-            deps: HashSet::new(),
+            deps: CompressedDots::new(),
         }
     }
 
     /// Adds new `deps` reported by `process_id`.
-    pub fn add(&mut self, process_id: ProcessId, deps: HashSet<Dot>) {
+    pub fn add(&mut self, process_id: ProcessId, deps: CompressedDots) {
         assert!(self.participants.len() < self.write_quorum_size);
 
         // record new participant
         self.participants.insert(process_id);
-        self.deps.extend(deps);
+        self.deps.merge(deps);
     }
 
     /// Check if we have all the replies we need.
@@ -111,7 +112,7 @@ impl QuorumRetries {
     }
 
     /// Returns the current aggregated result.
-    pub fn aggregated(&mut self) -> HashSet<Dot> {
+    pub fn aggregated(&mut self) -> CompressedDots {
         // resets `this.deps` so that it can be returned without having to clone
         // it
         std::mem::take(&mut self.deps)
@@ -134,13 +135,13 @@ mod tests {
         // agreement
         let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
         let clock_1 = Clock::from(10, 1);
-        let deps_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
+        let deps_1 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
         let ok_1 = true;
         let clock_2 = Clock::from(10, 2);
-        let deps_2 = HashSet::from_iter(vec![Dot::new(1, 2)]);
+        let deps_2 = CompressedDots::from_iter(vec![Dot::new(1, 2)]);
         let ok_2 = true;
         let clock_3 = Clock::from(10, 3);
-        let deps_3 = HashSet::from_iter(vec![Dot::new(1, 1)]);
+        let deps_3 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
         let ok_3 = true;
         quorum_clocks.add(1, clock_1, deps_1, ok_1);
         assert!(!quorum_clocks.all());
@@ -153,19 +154,20 @@ mod tests {
         assert_eq!(clock, Clock::from(10, 3));
         assert_eq!(
             deps,
-            HashSet::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
+            CompressedDots::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
         );
         assert!(ok);
 
         // disagreement
         let clock_1 = Clock::from(10, 1);
-        let deps_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
+        let deps_1 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
         let ok_1 = true;
         let clock_2 = Clock::from(12, 2);
-        let deps_2 = HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
+        let deps_2 =
+            CompressedDots::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
         let ok_2 = false;
         let clock_3 = Clock::from(10, 3);
-        let deps_3 = HashSet::from_iter(vec![Dot::new(1, 4)]);
+        let deps_3 = CompressedDots::from_iter(vec![Dot::new(1, 4)]);
         let ok_3 = true;
         // order: 1, 2
         let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
@@ -178,7 +180,7 @@ mod tests {
         assert_eq!(clock, Clock::from(12, 2));
         assert_eq!(
             deps,
-            HashSet::from_iter(vec![
+            CompressedDots::from_iter(vec![
                 Dot::new(1, 1),
                 Dot::new(1, 2),
                 Dot::new(1, 3)
@@ -199,7 +201,7 @@ mod tests {
         assert_eq!(clock, Clock::from(12, 2));
         assert_eq!(
             deps,
-            HashSet::from_iter(vec![
+            CompressedDots::from_iter(vec![
                 Dot::new(1, 1),
                 Dot::new(1, 2),
                 Dot::new(1, 3),
@@ -219,7 +221,7 @@ mod tests {
         assert_eq!(clock, Clock::from(12, 2));
         assert_eq!(
             deps,
-            HashSet::from_iter(vec![
+            CompressedDots::from_iter(vec![
                 Dot::new(1, 2),
                 Dot::new(1, 3),
                 Dot::new(1, 4)
@@ -235,8 +237,8 @@ mod tests {
 
         // agreement
         let mut quorum_retries = QuorumRetries::new(mq);
-        let deps_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
-        let deps_2 = HashSet::from_iter(vec![Dot::new(1, 2)]);
+        let deps_1 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
+        let deps_2 = CompressedDots::from_iter(vec![Dot::new(1, 2)]);
         quorum_retries.add(1, deps_1);
         assert!(!quorum_retries.all());
         quorum_retries.add(2, deps_2);
@@ -245,7 +247,7 @@ mod tests {
         let deps = quorum_retries.aggregated();
         assert_eq!(
             deps,
-            HashSet::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
+            CompressedDots::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
         );
     }
 }
