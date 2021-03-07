@@ -28,7 +28,7 @@ tracing-appender = "0.1.1"
 parking_lot = { version = "0.11.1", features = ["serde"] }
 num_cpus = "1.13.0"
 
-jemallocator = { version = "0.3.2", optional = true }
+jemallocator = { version = "0.3.2", features = ["background_threads"], optional = true }
 
 fantoch = { path = "../fantoch" }
 
