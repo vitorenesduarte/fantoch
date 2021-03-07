@@ -230,43 +230,34 @@ impl PredecessorsGraph {
         // compute number of yet executed dependencies
         let mut non_executed_deps_count = 0;
         for dep_dot in vertex.deps.iter() {
-            // consider only non-executed dependencies with a lower clock
-            let executed = self
-                .executed_clock
-                .read()
-                .contains(&dep_dot.source(), dep_dot.sequence());
-            if !executed {
-                trace!(
-                    "p{}: Predecessors::move_2 non executed dep {:?} | time = {}",
-                    self.process_id,
-                    dep_dot,
-                    time.millis()
-                );
-                // get the dependency and check its clock to see if it should be
-                // consider
-                let dep_ref = if let Some(dep_ref) =
-                    self.vertex_index.find(&dep_dot)
-                {
-                    dep_ref
-                } else {
-                    panic!(
-                        "p{}: Predecessors::move_2 non-executed dependency {:?} of {:?} must exist",
-                        self.process_id, dep_dot, dot,
-                    );
-                };
+            trace!(
+                "p{}: Predecessors::move_2 non executed dep {:?} | time = {}",
+                self.process_id,
+                dep_dot,
+                time.millis()
+            );
+            // get the dependency and check its clock to see if it should be
+            // consider
+            if let Some(dep_ref) = self.vertex_index.find(&dep_dot) {
                 let dep = dep_ref.read();
 
                 // only consider this dep if it has a lower clock
                 if dep.clock < vertex.clock {
                     trace!(
-                        "p{}: Predecessors::move_2 non executed dep with lower clock {:?} | time = {}",
-                        self.process_id,
-                        dep_dot,
-                        time.millis()
-                    );
+                    "p{}: Predecessors::move_2 non executed dep with lower clock {:?} | time = {}",
+                    self.process_id,
+                    dep_dot,
+                    time.millis()
+                );
                     non_executed_deps_count += 1;
                     self.phase_two_pending_index.index(dot, *dep_dot);
                 }
+            } else {
+                // if it's not indexed, then it must be already executed
+                trace!(
+                    "p{}: Predecessors::move_2 dependency {:?} of {:?} already executed",
+                    self.process_id, dep_dot, dot
+                );
             }
         }
 
@@ -369,15 +360,6 @@ impl PredecessorsGraph {
             time.millis()
         );
 
-        // mark dot as executed. this must be done before removing it from the
-        // index because of the following invariant: if the command is in the
-        // committed clock but not in the executed clock, then it must be
-        // indexed
-        assert!(self
-            .executed_clock
-            .write()
-            .add(&dot.source(), dot.sequence()));
-
         // remove from vertex index
         let vertex = self
             .vertex_index
@@ -405,6 +387,12 @@ impl PredecessorsGraph {
             dot,
             _time.millis()
         );
+
+        // mark dot as executed.
+        assert!(self
+            .executed_clock
+            .write()
+            .add(&dot.source(), dot.sequence()));
 
         // execute the command
         let mut store = self.store.lock();

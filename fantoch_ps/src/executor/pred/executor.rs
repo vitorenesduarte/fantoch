@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct PredecessorsExecutor {
+    executor_index: usize,
     process_id: ProcessId,
     config: Config,
     graph: PredecessorsGraph,
@@ -24,12 +25,19 @@ impl Executor for PredecessorsExecutor {
     type ExecutionInfo = PredecessorsExecutionInfo;
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
+        // this value will be overwritten
+        let executor_index = 0;
         let graph = PredecessorsGraph::new(process_id, shard_id, &config);
         Self {
+            executor_index,
             process_id,
             config,
             graph,
         }
+    }
+
+    fn set_executor_index(&mut self, index: usize) {
+        self.executor_index = index;
     }
 
     fn handle(&mut self, info: PredecessorsExecutionInfo, time: &dyn SysTime) {
@@ -43,16 +51,19 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
-        // TODO: is this called on all executors?
-        // we only need one of them
-        let executed = self.graph.executed_frontier();
-        trace!(
-            "p{}: PredecessorsExecutor::executed {:?} | time = {}",
-            self.process_id,
-            executed,
-            _time.millis()
-        );
-        Some(executed)
+        if self.executor_index == 0 {
+            // only generate this notification on the first executor
+            let executed = self.graph.executed_frontier();
+            trace!(
+                "p{}: PredecessorsExecutor::executed {:?} | time = {}",
+                self.process_id,
+                executed,
+                _time.millis()
+            );
+            Some(executed)
+        } else {
+            None
+        }
     }
 
     fn parallel() -> bool {
