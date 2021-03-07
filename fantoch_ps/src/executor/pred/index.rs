@@ -113,9 +113,9 @@ impl PendingIndex {
     }
 
     /// Indexes a new `dot` with `dep_dot` as a missing dependency.
-    pub fn index(&mut self, dot: Dot, dep_dot: Dot) {
+    pub fn index(&mut self, dep_dot: &Dot, dot: Dot) {
         self.index
-            .get_or(&dep_dot, || Default::default())
+            .get_or(dep_dot, || Default::default())
             .lock()
             .insert(dot);
     }

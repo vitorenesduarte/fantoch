@@ -187,7 +187,7 @@ impl PredecessorsGraph {
                     time.millis()
                 );
                 non_committed_deps_count += 1;
-                self.phase_one_pending_index.index(dot, *dep_dot);
+                self.phase_one_pending_index.index(dep_dot, dot);
             }
         }
 
@@ -250,7 +250,7 @@ impl PredecessorsGraph {
                     time.millis()
                 );
                     non_executed_deps_count += 1;
-                    self.phase_two_pending_index.index(dot, *dep_dot);
+                    self.phase_two_pending_index.index(dep_dot, dot);
                 }
             } else {
                 // if it's not indexed, then it must be already executed
@@ -288,12 +288,6 @@ impl PredecessorsGraph {
         deps: Arc<HashSet<Dot>>,
         time: &dyn SysTime,
     ) {
-        // mark dot as committed
-        assert!(self
-            .committed_clock
-            .write()
-            .add(&dot.source(), dot.sequence()));
-
         // create new vertex for this command and index it
         let vertex = Vertex::new(dot, cmd, clock, deps, time);
         if self.vertex_index.index(vertex).is_some() {
@@ -302,6 +296,12 @@ impl PredecessorsGraph {
                 self.process_id, dot
             );
         }
+
+        // mark dot as committed
+        assert!(self
+            .committed_clock
+            .write()
+            .add(&dot.source(), dot.sequence()));
     }
 
     fn try_phase_one_pending(&mut self, dot: Dot, time: &dyn SysTime) {
