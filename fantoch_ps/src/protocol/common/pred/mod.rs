@@ -51,11 +51,7 @@ impl CompressedDots {
     }
 
     pub fn len(&self) -> usize {
-        self.deps.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.deps.is_empty()
+        self.deps.values().map(|seqs| seqs.len()).sum()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Dot> + '_ {
