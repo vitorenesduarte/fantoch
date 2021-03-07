@@ -419,7 +419,7 @@ mod tests {
     use fantoch::id::{ClientId, Rifl};
     use fantoch::kvs::{KVOp, Key};
     use fantoch::time::RunTime;
-    use fantoch::HashMap;
+    use fantoch::{HashMap, HashSet};
     use permutator::{Combination, Permutation};
     use rand::seq::SliceRandom;
     use rand::Rng;
