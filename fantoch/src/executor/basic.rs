@@ -24,7 +24,8 @@ impl Executor for BasicExecutor {
         _shard_id: ShardId,
         _config: Config,
     ) -> Self {
-        let store = KVStore::new();
+        let monitor = false;
+        let store = KVStore::new(monitor);
         let metrics = ExecutorMetrics::new();
         let to_clients = Vec::new();
 
@@ -42,8 +43,7 @@ impl Executor for BasicExecutor {
         let ops =
             Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
         // execute op in the `KVStore`
-        let partial_results =
-            self.store.execute_with_monitor(&key, ops, rifl, &mut None);
+        let partial_results = self.store.execute(&key, ops, rifl);
         self.to_clients
             .push(ExecutorResult::new(rifl, key, partial_results));
     }
@@ -60,7 +60,7 @@ impl Executor for BasicExecutor {
         &self.metrics
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
         None
     }
 }

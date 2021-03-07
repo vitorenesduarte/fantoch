@@ -20,7 +20,6 @@ pub struct TableExecutor {
     execute_at_commit: bool,
     table: MultiVotesTable,
     store: KVStore,
-    monitor: Option<ExecutionOrderMonitor>,
     metrics: ExecutorMetrics,
     to_clients: VecDeque<ExecutorResult>,
     to_executors: Vec<(ShardId, TableExecutionInfo)>,
@@ -69,12 +68,7 @@ impl Executor for TableExecutor {
             config.n(),
             stability_threshold,
         );
-        let store = KVStore::new();
-        let monitor = if config.executor_monitor_execution_order() {
-            Some(ExecutionOrderMonitor::new())
-        } else {
-            None
-        };
+        let store = KVStore::new(config.executor_monitor_execution_order());
         let metrics = ExecutorMetrics::new();
         let to_clients = Default::default();
         let to_executors = Default::default();
@@ -85,7 +79,6 @@ impl Executor for TableExecutor {
             execute_at_commit: config.execute_at_commit(),
             table,
             store,
-            monitor,
             metrics,
             to_clients,
             to_executors,
@@ -144,8 +137,8 @@ impl Executor for TableExecutor {
         &self.metrics
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
-        self.monitor.as_ref()
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
+        self.store.monitor().cloned()
     }
 }
 
@@ -176,7 +169,6 @@ impl TableExecutor {
                         key.clone(),
                         pending,
                         &mut self.store,
-                        &mut self.monitor,
                         &mut self.to_clients,
                     );
 
@@ -188,7 +180,6 @@ impl TableExecutor {
                             &key,
                             pending,
                             &mut self.store,
-                            &mut self.monitor,
                             &mut self.to_clients,
                             &mut self.to_executors,
                             &mut pending_per_key.buffered,
@@ -238,7 +229,6 @@ impl TableExecutor {
                 &key,
                 pending,
                 &mut self.store,
-                &mut self.monitor,
                 &mut self.to_clients,
                 &mut self.to_executors,
                 &mut pending_per_key.buffered,
@@ -260,14 +250,13 @@ impl TableExecutor {
         key: &Key,
         mut pending: Pending,
         store: &mut KVStore,
-        monitor: &mut Option<ExecutionOrderMonitor>,
         to_clients: &mut VecDeque<ExecutorResult>,
         to_executors: &mut Vec<(ShardId, TableExecutionInfo)>,
         buffered: &mut HashMap<Rifl, usize>,
     ) -> Option<Pending> {
         if pending.missing_stable_keys == 0 {
             // if the command is single-key, execute immediately
-            Self::do_execute(key.clone(), pending, store, monitor, to_clients);
+            Self::do_execute(key.clone(), pending, store, to_clients);
             None
         } else {
             // otherwise, send a `Stable` message to each of the other
@@ -290,13 +279,7 @@ impl TableExecutor {
             if pending.missing_stable_keys == 0 {
                 // if the command is already stable at all keys/partitions, then
                 // execute it
-                Self::do_execute(
-                    key.clone(),
-                    pending,
-                    store,
-                    monitor,
-                    to_clients,
-                );
+                Self::do_execute(key.clone(), pending, store, to_clients);
                 None
             } else {
                 // in this case, the command cannot be execute; so send it back
@@ -307,20 +290,13 @@ impl TableExecutor {
     }
 
     fn execute(&mut self, key: Key, stable: Pending) {
-        Self::do_execute(
-            key,
-            stable,
-            &mut self.store,
-            &mut self.monitor,
-            &mut self.to_clients,
-        )
+        Self::do_execute(key, stable, &mut self.store, &mut self.to_clients)
     }
 
     fn do_execute(
         key: Key,
         stable: Pending,
         store: &mut KVStore,
-        monitor: &mut Option<ExecutionOrderMonitor>,
         to_clients: &mut VecDeque<ExecutorResult>,
     ) {
         // take the ops inside the arc if we're the last with a reference to it
@@ -330,8 +306,7 @@ impl TableExecutor {
         let ops =
             Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
         // execute ops in the `KVStore`
-        let partial_results =
-            store.execute_with_monitor(&key, ops, rifl, monitor);
+        let partial_results = store.execute(&key, ops, rifl);
         to_clients.push_back(ExecutorResult::new(rifl, key, partial_results));
     }
 }

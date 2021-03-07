@@ -18,7 +18,6 @@ pub struct SlotExecutor {
     shard_id: ShardId,
     config: Config,
     store: KVStore,
-    monitor: Option<ExecutionOrderMonitor>,
     next_slot: Slot,
     // TODO maybe BinaryHeap
     to_execute: HashMap<Slot, Command>,
@@ -30,12 +29,7 @@ impl Executor for SlotExecutor {
     type ExecutionInfo = SlotExecutionInfo;
 
     fn new(_process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
-        let store = KVStore::new();
-        let monitor = if config.executor_monitor_execution_order() {
-            Some(ExecutionOrderMonitor::new())
-        } else {
-            None
-        };
+        let store = KVStore::new(config.executor_monitor_execution_order());
         // the next slot to be executed is 1
         let next_slot = 1;
         // there's nothing to execute in the beginning
@@ -46,7 +40,6 @@ impl Executor for SlotExecutor {
             shard_id,
             config,
             store,
-            monitor,
             next_slot,
             to_execute,
             metrics,
@@ -87,8 +80,8 @@ impl Executor for SlotExecutor {
         &self.metrics
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
-        self.monitor.as_ref()
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
+        self.store.monitor().cloned()
     }
 }
 
@@ -104,8 +97,7 @@ impl SlotExecutor {
 
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results =
-            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
+        let results = cmd.execute(self.shard_id, &mut self.store);
         // update results if this rifl is pending
         self.to_clients.extend(results);
     }

@@ -99,7 +99,8 @@ mod tests {
         let process_id = 1;
         let shard_id = 0;
         let mut pending = AggregatePending::new(process_id, shard_id);
-        let mut store = KVStore::new();
+        let monitor = false;
+        let mut store = KVStore::new(monitor);
 
         // keys and commands
         let key_a = String::from("A");
@@ -136,7 +137,7 @@ mod tests {
         assert!(!pending.wait_for(&put_b));
 
         // add the result of get b and assert that the command is not ready yet
-        let get_b_res = store.execute(&key_b, KVOp::Get);
+        let get_b_res = store.test_execute(&key_b, KVOp::Get);
         let res = pending.add_executor_result(ExecutorResult::new(
             get_ab_rifl,
             key_b.clone(),
@@ -145,7 +146,7 @@ mod tests {
         assert!(res.is_none());
 
         // add the result of put a before being waited for
-        let put_a_res = store.execute(&key_a, KVOp::Put(foo.clone()));
+        let put_a_res = store.test_execute(&key_a, KVOp::Put(foo.clone()));
         let res = pending.add_executor_result(ExecutorResult::new(
             put_a_rifl,
             key_a.clone(),
@@ -173,7 +174,7 @@ mod tests {
         assert_eq!(res.results().get(&key_a).unwrap(), &vec![None]);
 
         // add the result of put b and assert that the command is ready
-        let put_b_res = store.execute(&key_b, KVOp::Put(bar.clone()));
+        let put_b_res = store.test_execute(&key_b, KVOp::Put(bar.clone()));
         let res = pending.add_executor_result(ExecutorResult::new(
             put_b_rifl,
             key_b.clone(),
@@ -189,7 +190,7 @@ mod tests {
         assert_eq!(res.results().get(&key_b).unwrap(), &vec![None]);
 
         // add the result of get a and assert that the command is ready
-        let get_a_res = store.execute(&key_a, KVOp::Get);
+        let get_a_res = store.test_execute(&key_a, KVOp::Get);
         let res = pending.add_executor_result(ExecutorResult::new(
             get_ab_rifl,
             key_a.clone(),

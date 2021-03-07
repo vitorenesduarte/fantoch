@@ -63,7 +63,7 @@ impl Executor for PredecessorsExecutor {
         &self.graph.metrics()
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
         self.graph.monitor()
     }
 }

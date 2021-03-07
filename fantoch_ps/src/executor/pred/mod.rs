@@ -43,10 +43,12 @@ pub struct PredecessorsGraph {
     metrics: ExecutorMetrics,
     execute_at_commit: bool,
 
-    // these three usually live at the upper level, but since in caesar any
-    // executor may execute commands on any key, we need e.g. the kvs here
+    // these two usually live at the upper level, but since in caesar any
+    // executor may execute commands on any key, we need the kvs to be shared
+    // by all executors.
+    // TODO: since kvs operations are super fast, this should not be a
+    // bottleneck
     store: Arc<Mutex<KVStore>>,
-    monitor: Option<ExecutionOrderMonitor>,
     to_clients: VecDeque<ExecutorResult>,
 }
 
@@ -72,12 +74,9 @@ impl PredecessorsGraph {
         let execute_at_commit = config.execute_at_commit();
 
         // create kvs
-        let store = Arc::new(Mutex::new(KVStore::new()));
-        let monitor = if config.executor_monitor_execution_order() {
-            Some(ExecutionOrderMonitor::new())
-        } else {
-            None
-        };
+        let store = Arc::new(Mutex::new(KVStore::new(
+            config.executor_monitor_execution_order(),
+        )));
         let to_clients = Default::default();
         PredecessorsGraph {
             process_id,
@@ -90,7 +89,6 @@ impl PredecessorsGraph {
             metrics,
             execute_at_commit,
             store,
-            monitor,
             to_clients,
         }
     }
@@ -109,8 +107,8 @@ impl PredecessorsGraph {
         &self.metrics
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
-        self.monitor.as_ref()
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
+        self.store.lock().monitor().cloned()
     }
 
     /// Add a new command.
@@ -410,7 +408,7 @@ impl PredecessorsGraph {
 
         // execute the command
         let mut store = self.store.lock();
-        let results = cmd.execute(self.shard_id, &mut store, &mut self.monitor);
+        let results = cmd.execute(self.shard_id, &mut store);
         self.to_clients.extend(results);
     }
 }

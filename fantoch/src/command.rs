@@ -1,4 +1,4 @@
-use crate::executor::{ExecutionOrderMonitor, ExecutorResult};
+use crate::executor::ExecutorResult;
 use crate::id::{Rifl, ShardId};
 use crate::kvs::{KVOp, KVOpResult, KVStore, Key};
 use crate::HashMap;
@@ -122,7 +122,6 @@ impl Command {
         self,
         shard_id: ShardId,
         store: &'a mut KVStore,
-        monitor: &'a mut Option<ExecutionOrderMonitor>,
     ) -> impl Iterator<Item = ExecutorResult> + 'a {
         let rifl = self.rifl;
         self.into_iter(shard_id).map(move |(key, ops)| {
@@ -131,8 +130,7 @@ impl Command {
             let ops =
                 Arc::try_unwrap(ops).unwrap_or_else(|ops| ops.as_ref().clone());
             // execute this op
-            let partial_results =
-                store.execute_with_monitor(&key, ops, rifl, monitor);
+            let partial_results = store.execute(&key, ops, rifl);
             ExecutorResult::new(rifl, key, partial_results)
         })
     }
