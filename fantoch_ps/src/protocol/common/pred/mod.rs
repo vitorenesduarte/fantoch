@@ -6,14 +6,16 @@ pub use clocks::{
     Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
 };
 
-use fantoch::id::{Dot, ProcessId};
-use fantoch::{HashMap, HashSet};
+use fantoch::id::Dot;
+use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use std::iter::FromIterator;
 
+const MAX: usize = 100;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompressedDots {
-    pub deps: HashMap<ProcessId, HashSet<u64>>,
+    pub deps: HashSet<Dot>,
 }
 
 impl CompressedDots {
@@ -24,40 +26,31 @@ impl CompressedDots {
     }
 
     pub fn insert(&mut self, dep: Dot) {
-        self.deps
-            .entry(dep.source())
-            .or_default()
-            .insert(dep.sequence());
+        if self.len() < MAX {
+            self.deps.insert(dep);
+        }
     }
 
     pub fn remove(&mut self, dep: &Dot) {
-        if let Some(seqs) = self.deps.get_mut(&dep.source()) {
-            seqs.remove(&dep.sequence());
-        }
+        self.deps.remove(dep);
     }
 
     pub fn contains(&self, dep: &Dot) -> bool {
-        if let Some(seqs) = self.deps.get(&dep.source()) {
-            seqs.contains(&dep.sequence())
-        } else {
-            false
-        }
+        self.deps.contains(dep)
     }
 
     pub fn merge(&mut self, other: Self) {
-        for (process_id, seqs) in other.deps {
-            self.deps.entry(process_id).or_default().extend(seqs);
+        for dep in other.deps {
+            self.insert(dep);
         }
     }
 
     pub fn len(&self) -> usize {
-        self.deps.values().map(|seqs| seqs.len()).sum()
+        self.deps.len()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Dot> + '_ {
-        self.deps.iter().flat_map(|(process_id, seqs)| {
-            seqs.into_iter().map(move |seq| Dot::new(*process_id, *seq))
-        })
+    pub fn iter(&self) -> impl Iterator<Item = &Dot> + '_ {
+        self.deps.iter()
     }
 }
 
