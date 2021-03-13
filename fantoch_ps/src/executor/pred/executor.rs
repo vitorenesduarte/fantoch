@@ -78,7 +78,7 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn parallel() -> bool {
-        true
+        false
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
