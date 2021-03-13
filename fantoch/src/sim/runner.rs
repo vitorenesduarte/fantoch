@@ -339,8 +339,8 @@ where
             self.simulation.get_process(process_id);
 
         // handle executed and schedule new actions
-        if let Some(executed) = executor.executed(time) {
-            process.handle_executed(executed, time);
+        if let Some((committed, executed)) = executor.committed_and_executed(time) {
+            process.handle_committed_and_executed(committed, executed, time);
             self.send_to_processes_and_executors(process_id);
         }
 

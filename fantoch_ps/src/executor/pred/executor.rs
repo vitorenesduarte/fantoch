@@ -1,12 +1,12 @@
 use crate::executor::pred::PredecessorsGraph;
-use crate::protocol::common::pred::{Clock, CaesarDots};
+use crate::protocol::common::pred::{CaesarDots, Clock};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
     ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
 };
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::protocol::{Executed, MessageIndex};
+use fantoch::protocol::{Committed, Executed, MessageIndex};
 use fantoch::time::SysTime;
 use fantoch::trace;
 use serde::{Deserialize, Serialize};
@@ -49,17 +49,20 @@ impl Executor for PredecessorsExecutor {
         self.graph.to_clients()
     }
 
-    fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
+    fn committed_and_executed(
+        &mut self,
+        _time: &dyn SysTime,
+    ) -> Option<(Committed, Executed)> {
         if self.executor_index == 0 {
             // only generate this notification on the first executor
-            let executed = self.graph.executed_frontier();
+            let committed_and_executed = self.graph.committed_and_executed_frontiers();
             trace!(
-                "p{}: PredecessorsExecutor::executed {:?} | time = {}",
+                "p{}: PredecessorsExecutor::committed_and_executed {:?} | time = {}",
                 self.process_id,
-                executed,
+                committed_and_executed,
                 _time.millis()
             );
-            Some(executed)
+            Some(committed_and_executed)
         } else {
             None
         }

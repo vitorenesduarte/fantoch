@@ -10,7 +10,7 @@ mod executor;
 pub use executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 
 use self::index::{PendingIndex, Vertex, VertexIndex};
-use crate::protocol::common::pred::{Clock, CaesarDots};
+use crate::protocol::common::pred::{CaesarDots, Clock};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -18,7 +18,7 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
-use fantoch::protocol::Executed;
+use fantoch::protocol::{Committed, Executed};
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{debug, trace};
@@ -98,12 +98,10 @@ impl PredecessorsGraph {
         self.to_clients.pop_front()
     }
 
-    fn executed_frontier(&self) -> Executed {
-        // TODO: caesar paper says that GC occurs once a command is committed
-        //       everywhere. we have found that correctness doesn't hold in that
-        //       case, and instead GC should occur once the command is executed
-        //       everywhere. here we keep what's said in the caesar paper.
-        self.committed_clock.read().frontier()
+    fn committed_and_executed_frontiers(&self) -> (Committed, Executed) {
+        let committed = self.committed_clock.read().frontier();
+        let executed = self.executed_clock.read().frontier();
+        (committed, executed)
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
