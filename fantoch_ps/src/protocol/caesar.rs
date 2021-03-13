@@ -28,11 +28,7 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track_committed: GCTrack,
-    // TODO: maybe only store the shard keys (which are the only thing needed
-    //       from the command)
-    gced_committed: HashMap<Dot, (Command, Clock)>,
-    gc_track_executed: GCTrack,
+    gc_track: GCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
@@ -79,9 +75,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track_committed = GCTrack::new(process_id, shard_id, config.n());
-        let gced_committed = HashMap::new();
-        let gc_track_executed = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
@@ -94,9 +88,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             bp,
             key_clocks,
             cmds,
-            gc_track_committed,
-            gced_committed,
-            gc_track_executed,
+            gc_track,
             to_processes,
             to_executors,
             buffered_retries,
@@ -168,10 +160,9 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MRetryAck { dot, deps } => {
                 self.handle_mretryack(from, dot, deps, time)
             }
-            Message::MGarbageCollection {
-                committed,
-                executed,
-            } => self.handle_mgc(from, committed, executed, time),
+            Message::MGarbageCollection { committed } => {
+                self.handle_mgc(from, committed, time)
+            }
         }
 
         // every time a new message is processed, try to unblock commands that
@@ -194,17 +185,16 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
     fn handle_committed_and_executed(
         &mut self,
         committed: Committed,
-        executed: Executed,
+        _executed: Executed,
         _time: &dyn SysTime,
     ) {
         trace!(
             "p{}: handle_committed_and_executed({:?}) | time={}",
             self.id(),
-            executed,
+            committed,
             _time.micros()
         );
-        self.gc_track_committed.update_clock(committed);
-        self.gc_track_executed.update_clock(executed);
+        self.gc_track.update_clock(committed);
     }
 
     /// Returns a new action to be sent to other processes.
@@ -683,8 +673,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // if we're not running gc, remove the dot info now
         if !self.gc_running() {
-            self.gc_committed(dot);
-            self.gc_executed(dot);
+            self.gc_command(dot);
         }
     }
 
@@ -821,54 +810,36 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         from: ProcessId,
         committed: VClock<ProcessId>,
-        executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: MGarbageCollection({:?}, {:?}) from {} | time={}",
+            "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             committed,
-            executed,
             from,
             _time.micros()
         );
 
         // update gc track and compute newly stable dots
-        self.gc_track_committed.update_clock_of(from, committed);
-        let committed_stable = self.gc_track_committed.stable();
+        self.gc_track.update_clock_of(from, committed);
+        let stable = self.gc_track.stable();
 
         // since the dot info is shared across workers, we don't need to send
         // an MStable message to all the workers, as in the other protocols,
         // we can do it right here
-        let mut committed_stable_count = 0;
-        util::dots(committed_stable).into_iter().for_each(|dot| {
-            committed_stable_count += 1;
-            self.gc_committed(dot)
+        let mut stable_count = 0;
+        util::dots(stable).into_iter().for_each(|dot| {
+            stable_count += 1;
+            self.gc_command(dot)
         });
         trace!(
-            "p{}: MGarbageCollection committed_stable_count: {} | time={}",
+            "p{}: MGarbageCollection stable_count: {} | time={}",
             self.id(),
-            committed_stable_count,
+            stable_count,
             _time.micros()
         );
 
-        // do the same for executed
-        self.gc_track_executed.update_clock_of(from, executed);
-        let executed_stable = self.gc_track_executed.stable();
-
-        let mut executed_stable_count = 0;
-        util::dots(executed_stable).into_iter().for_each(|dot| {
-            executed_stable_count += 1;
-            self.gc_executed(dot)
-        });
-        trace!(
-            "p{}: MGarbageCollection executed_stable_count: {} | time={}",
-            self.id(),
-            executed_stable_count,
-            _time.micros()
-        );
-
-        self.bp.stable(executed_stable_count);
+        self.bp.stable(stable_count);
     }
 
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
@@ -878,17 +849,13 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        // retrieve the committed and executed clock
-        let committed = self.gc_track_committed.clock();
-        let executed = self.gc_track_executed.clock();
+        // retrieve the committed clock
+        let committed = self.gc_track.clock();
 
         // save new action
         self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
-            msg: Message::MGarbageCollection {
-                committed,
-                executed,
-            },
+            msg: Message::MGarbageCollection { committed },
         });
     }
 
@@ -923,28 +890,16 @@ impl<KC: KeyClocks> Caesar<KC> {
         }
     }
 
-    fn gc_committed(&mut self, dot: Dot) {
+    fn gc_command(&mut self, dot: Dot) {
         if let Some(info) = self.cmds.gc_single(&dot) {
             // get the command
             let cmd = info.cmd.expect("command has been set");
 
-            // save the command clock to be gced later
-            assert!(self
-                .gced_committed
-                .insert(dot, (cmd, info.clock))
-                .is_none());
+            // remove previous clock (if any)
+            Self::remove_clock(&mut self.key_clocks, &cmd, info.clock);
         } else {
             panic!("we're the single worker performing gc, so all commands should exist");
         }
-    }
-
-    fn gc_executed(&mut self, dot: Dot) {
-        let (cmd, clock) = self
-            .gced_committed
-            .remove(&dot)
-            .expect("executed command should have been committed");
-        // remove previous clock (if any)
-        Self::remove_clock(&mut self.key_clocks, &cmd, clock);
     }
 
     fn safe_to_ignore(
@@ -1281,7 +1236,6 @@ pub enum Message {
     },
     MGarbageCollection {
         committed: VClock<ProcessId>,
-        executed: VClock<ProcessId>,
     },
 }
 
