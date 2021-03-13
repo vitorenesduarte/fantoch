@@ -1,71 +1,80 @@
 use crate::executor::pred::PredecessorsGraph;
-use crate::protocol::common::pred::{CaesarDots, Clock};
+use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
     ExecutionOrderMonitor, Executor, ExecutorMetrics, ExecutorResult,
 };
 use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::protocol::{Committed, Executed, MessageIndex};
+use fantoch::kvs::KVStore;
+use fantoch::protocol::{Executed, Committed, MessageIndex};
 use fantoch::time::SysTime;
 use fantoch::trace;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct PredecessorsExecutor {
-    executor_index: usize,
     process_id: ProcessId,
+    shard_id: ShardId,
     config: Config,
     graph: PredecessorsGraph,
+    store: KVStore,
+    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl Executor for PredecessorsExecutor {
     type ExecutionInfo = PredecessorsExecutionInfo;
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
-        // this value will be overwritten
-        let executor_index = 0;
-        let graph = PredecessorsGraph::new(process_id, shard_id, &config);
+        let graph = PredecessorsGraph::new(process_id, &config);
+        let store = KVStore::new(config.executor_monitor_execution_order());
+        let to_clients = Default::default();
         Self {
-            executor_index,
             process_id,
+            shard_id,
             config,
             graph,
+            store,
+            to_clients,
         }
-    }
-
-    fn set_executor_index(&mut self, index: usize) {
-        self.executor_index = index;
     }
 
     fn handle(&mut self, info: PredecessorsExecutionInfo, time: &dyn SysTime) {
         // handle new command
         self.graph
             .add(info.dot, info.cmd, info.clock, info.deps, time);
+
+        // get more commands that are ready to be executed
+        while let Some(cmd) = self.graph.command_to_execute() {
+            trace!(
+                "p{}: PredecessorsExecutor::comands_to_execute {:?} | time = {}",
+                self.process_id,
+                cmd.rifl(),
+                time.millis()
+            );
+            self.execute(cmd);
+        }
     }
 
     fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.graph.to_clients()
+        self.to_clients.pop_front()
     }
 
     fn committed_and_executed(
         &mut self,
         _time: &dyn SysTime,
     ) -> Option<(Committed, Executed)> {
-        if self.executor_index == 0 {
-            // only generate this notification on the first executor
-            let committed_and_executed = self.graph.committed_and_executed_frontiers();
-            trace!(
-                "p{}: PredecessorsExecutor::committed_and_executed {:?} | time = {}",
-                self.process_id,
-                committed_and_executed,
-                _time.millis()
-            );
-            Some(committed_and_executed)
-        } else {
-            None
-        }
+        let committed_and_executed =
+            self.graph.committed_and_executed_frontiers();
+        trace!(
+            "p{}: PredecessorsExecutor::committed_and_executed {:?} | time = {}",
+            self.process_id,
+            committed_and_executed,
+            _time.millis()
+        );
+        Some(committed_and_executed)
     }
 
     fn parallel() -> bool {
@@ -77,7 +86,15 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn monitor(&self) -> Option<ExecutionOrderMonitor> {
-        self.graph.monitor()
+        self.store.monitor().cloned()
+    }
+}
+
+impl PredecessorsExecutor {
+    fn execute(&mut self, cmd: Command) {
+        // execute the command
+        let results = cmd.execute(self.shard_id, &mut self.store);
+        self.to_clients.extend(results);
     }
 }
 
@@ -86,7 +103,7 @@ pub struct PredecessorsExecutionInfo {
     dot: Dot,
     cmd: Command,
     clock: Clock,
-    deps: Arc<CaesarDots>,
+    deps: Arc<CaesarDeps>,
 }
 
 impl PredecessorsExecutionInfo {
@@ -94,7 +111,7 @@ impl PredecessorsExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CaesarDots>,
+        deps: Arc<CaesarDeps>,
     ) -> Self {
         Self {
             dot,
@@ -107,6 +124,6 @@ impl PredecessorsExecutionInfo {
 
 impl MessageIndex for PredecessorsExecutionInfo {
     fn index(&self) -> Option<(usize, usize)> {
-        Some((0, self.dot.sequence() as usize))
+        None
     }
 }

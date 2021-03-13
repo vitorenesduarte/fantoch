@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 use std::iter::FromIterator;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CaesarDots {
+pub struct CaesarDeps {
     pub deps: HashSet<Dot>,
 }
 
-impl CaesarDots {
+impl CaesarDeps {
     pub fn new() -> Self {
         Self {
             deps: Default::default(),
@@ -50,7 +50,7 @@ impl CaesarDots {
     }
 }
 
-impl FromIterator<Dot> for CaesarDots {
+impl FromIterator<Dot> for CaesarDeps {
     fn from_iter<T: IntoIterator<Item = Dot>>(iter: T) -> Self {
         let mut compressed_dots = Self::new();
         for dot in iter {

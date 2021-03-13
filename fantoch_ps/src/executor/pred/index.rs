@@ -1,11 +1,10 @@
-use crate::protocol::common::pred::{Clock, CaesarDots};
+use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
-use fantoch::id::Dot;
-use fantoch::shared::{SharedMap, SharedMapRef};
+use fantoch::hash_map::HashMap;
+use fantoch::id::{Dot, ProcessId};
 use fantoch::time::SysTime;
 use fantoch::HashSet;
-use parking_lot::{Mutex, RwLock};
-use std::collections::BTreeSet;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -13,7 +12,7 @@ pub struct Vertex {
     pub dot: Dot,
     pub cmd: Command,
     pub clock: Clock,
-    pub deps: Arc<CaesarDots>,
+    pub deps: Arc<CaesarDeps>,
     pub start_time_ms: u64,
     missing_deps: usize,
 }
@@ -23,7 +22,7 @@ impl Vertex {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CaesarDots>,
+        deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time_ms = time.millis();
@@ -64,13 +63,15 @@ impl Vertex {
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
-    index: Arc<SharedMap<Dot, RwLock<Vertex>>>,
+    process_id: ProcessId,
+    index: HashMap<Dot, RefCell<Vertex>>,
 }
 
 impl VertexIndex {
-    pub fn new() -> Self {
+    pub fn new(process_id: ProcessId) -> Self {
         Self {
-            index: Arc::new(SharedMap::new()),
+            process_id,
+            index: HashMap::new(),
         }
     }
 
@@ -78,53 +79,44 @@ impl VertexIndex {
     pub fn index(&mut self, vertex: Vertex) -> Option<Vertex> {
         let dot = vertex.dot;
         self.index
-            .insert(dot, RwLock::new(vertex))
+            .insert(dot, RefCell::new(vertex))
             .map(|cell| cell.into_inner())
     }
 
     #[allow(dead_code)]
-    pub fn dots(&self) -> BTreeSet<Dot> {
-        self.index.iter().map(|entry| *entry.key()).collect()
+    pub fn dots(&self) -> impl Iterator<Item = &Dot> + '_ {
+        self.index.keys()
     }
 
-    pub fn find(
-        &self,
-        dot: &Dot,
-    ) -> Option<SharedMapRef<'_, Dot, RwLock<Vertex>>> {
+    pub fn find(&self, dot: &Dot) -> Option<&RefCell<Vertex>> {
         self.index.get(dot)
     }
 
     /// Removes a vertex from the index.
     pub fn remove(&mut self, dot: &Dot) -> Option<Vertex> {
-        self.index.remove(dot).map(|(_, cell)| cell.into_inner())
+        self.index.remove(dot).map(|cell| cell.into_inner())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct PendingIndex {
-    index: Arc<SharedMap<Dot, Mutex<HashSet<Dot>>>>,
+    index: HashMap<Dot, HashSet<Dot>>,
 }
 
 impl PendingIndex {
     pub fn new() -> Self {
         Self {
-            index: Arc::new(SharedMap::new()),
+            index: HashMap::new(),
         }
     }
 
     /// Indexes a new `dot` with `dep_dot` as a missing dependency.
-    pub fn index(&mut self, dep_dot: &Dot, dot: Dot) {
-        self.index
-            .get_or(dep_dot, || Default::default())
-            .lock()
-            .insert(dot);
+    pub fn index(&mut self, dot: Dot, dep_dot: Dot) {
+        self.index.entry(dep_dot).or_default().insert(dot);
     }
 
     /// Finds all pending dots for a given dependency.
     pub fn remove(&mut self, dep_dot: &Dot) -> HashSet<Dot> {
-        self.index
-            .remove(dep_dot)
-            .map(|(_, deps)| deps.into_inner())
-            .unwrap_or_default()
+        self.index.remove(dep_dot).unwrap_or_default()
     }
 }

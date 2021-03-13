@@ -1,5 +1,5 @@
 use super::{Clock, KeyClocks};
-use crate::protocol::common::pred::CaesarDots;
+use crate::protocol::common::pred::CaesarDeps;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::Key;
@@ -91,11 +91,11 @@ impl KeyClocks for LockedKeyClocks {
         cmd: &Command,
         clock: Clock,
         mut higher: Option<&mut HashSet<Dot>>,
-    ) -> CaesarDots {
+    ) -> CaesarDeps {
         // TODO is this data structure ever GCed? otherwise the set that we
         // return here will grow unbounded as the more commands are processed in
         // the system
-        let mut predecessors = CaesarDots::new();
+        let mut predecessors = CaesarDeps::new();
         cmd.keys(self.shard_id).for_each(|key| {
             self.apply_if_commands_contains_key(key, |commands| {
                 for (cmd_clock, cmd_dot) in commands.read().iter() {
@@ -172,8 +172,8 @@ mod tests {
         HashSet::from_iter(deps)
     }
 
-    fn compressed_deps(deps: Vec<Dot>) -> CaesarDots {
-        CaesarDots::from_iter(deps)
+    fn caesar_deps(deps: Vec<Dot>) -> CaesarDeps {
+        CaesarDeps::from_iter(deps)
     }
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
              cmd: &Command,
              clock: Clock,
              expected_blocking: HashSet<Dot>,
-             expected_predecessors: CaesarDots| {
+             expected_predecessors: CaesarDeps| {
                 let mut blocking = HashSet::new();
                 let predecessors = key_clocks.predecessors(
                     dot,
@@ -263,7 +263,7 @@ mod tests {
             &cmd_a,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // --------------------------------------
@@ -276,7 +276,7 @@ mod tests {
             &cmd_a,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![dot_1]),
+            caesar_deps(vec![dot_1]),
         );
 
         // ii. dot_1 is *not* reported for command b with clock 2
@@ -285,7 +285,7 @@ mod tests {
             &cmd_b,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iii. dot_1 is *not* reported for command c with clock 2
@@ -294,7 +294,7 @@ mod tests {
             &cmd_c,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iv. dot_1 is reported for command ac with clock 2
@@ -303,7 +303,7 @@ mod tests {
             &cmd_ac,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![dot_1]),
+            caesar_deps(vec![dot_1]),
         );
 
         // --------------------------------------
@@ -317,7 +317,7 @@ mod tests {
             &cmd_a,
             clock_2,
             deps(vec![dot_3]),
-            compressed_deps(vec![dot_1]),
+            caesar_deps(vec![dot_1]),
         );
 
         // ii. no dot is reported for command b with clock 2
@@ -326,7 +326,7 @@ mod tests {
             &cmd_b,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iii. dot_1 is *not* reported for command c with clock 2, but dot_3
@@ -336,7 +336,7 @@ mod tests {
             &cmd_c,
             clock_2,
             deps(vec![dot_3]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iv. dot_1 is reported for command ac with clock 2, and dot_3 blocks
@@ -345,7 +345,7 @@ mod tests {
             &cmd_ac,
             clock_2,
             deps(vec![dot_3]),
-            compressed_deps(vec![dot_1]),
+            caesar_deps(vec![dot_1]),
         );
 
         // 2. now check for clock 4
@@ -355,7 +355,7 @@ mod tests {
             &cmd_a,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![dot_1, dot_3]),
+            caesar_deps(vec![dot_1, dot_3]),
         );
 
         // ii. no dot is reported for command b with clock 4
@@ -364,7 +364,7 @@ mod tests {
             &cmd_b,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iii. only dot_3 is reported for command c with clock 4
@@ -373,7 +373,7 @@ mod tests {
             &cmd_c,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![dot_3]),
+            caesar_deps(vec![dot_3]),
         );
 
         // iv. dot_1 and dot_3 are reported for command ac with clock 4
@@ -382,7 +382,7 @@ mod tests {
             &cmd_ac,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![dot_1, dot_3]),
+            caesar_deps(vec![dot_1, dot_3]),
         );
 
         // --------------------------------------
@@ -396,7 +396,7 @@ mod tests {
             &cmd_a,
             clock_2,
             deps(vec![dot_3]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // ii. no dot is reported for command b with clock 2
@@ -405,7 +405,7 @@ mod tests {
             &cmd_b,
             clock_2,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iii. no dot is reported for command c with clock 2, but dot_3
@@ -415,7 +415,7 @@ mod tests {
             &cmd_c,
             clock_2,
             deps(vec![dot_3]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iv. no dot is reported for command ac with clock 2, and dot_3 blocks
@@ -424,7 +424,7 @@ mod tests {
             &cmd_ac,
             clock_2,
             deps(vec![dot_3]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // 2. check for clock 4
@@ -434,7 +434,7 @@ mod tests {
             &cmd_a,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![dot_3]),
+            caesar_deps(vec![dot_3]),
         );
 
         // ii. neither dot is reported for command b with clock 4
@@ -443,7 +443,7 @@ mod tests {
             &cmd_b,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
 
         // iii. only dot_3 is reported for command c with clock 4
@@ -452,7 +452,7 @@ mod tests {
             &cmd_c,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![dot_3]),
+            caesar_deps(vec![dot_3]),
         );
 
         // iv. only dot_3 are reported for command ac with clock 4
@@ -461,7 +461,7 @@ mod tests {
             &cmd_ac,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![dot_3]),
+            caesar_deps(vec![dot_3]),
         );
 
         // --------------------------------------
@@ -474,28 +474,28 @@ mod tests {
             &cmd_a,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
         check(
             &key_clocks,
             &cmd_b,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
         check(
             &key_clocks,
             &cmd_c,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
         check(
             &key_clocks,
             &cmd_ac,
             clock_4,
             deps(vec![]),
-            compressed_deps(vec![]),
+            caesar_deps(vec![]),
         );
     }
 }

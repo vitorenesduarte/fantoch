@@ -1,4 +1,4 @@
-/// This modul contains the definition of `Vertex`, `VertexIndex` and
+/// This module contains the definition of `Vertex`, `VertexIndex` and
 /// `PendingIndex`.
 mod index;
 
@@ -10,19 +10,15 @@ mod executor;
 pub use executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 
 use self::index::{PendingIndex, Vertex, VertexIndex};
-use crate::protocol::common::pred::{CaesarDots, Clock};
+use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::executor::{
-    ExecutionOrderMonitor, ExecutorMetrics, ExecutorMetricsKind, ExecutorResult,
-};
-use fantoch::id::{Dot, ProcessId, ShardId};
-use fantoch::kvs::KVStore;
+use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
+use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::{Committed, Executed};
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{debug, trace};
-use parking_lot::{Mutex, RwLock};
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::Arc;
@@ -31,85 +27,69 @@ use threshold::AEClock;
 #[derive(Clone)]
 pub struct PredecessorsGraph {
     process_id: ProcessId,
-    shard_id: ShardId,
-    committed_clock: Arc<RwLock<AEClock<ProcessId>>>,
-    executed_clock: Arc<RwLock<AEClock<ProcessId>>>,
+    committed_clock: AEClock<ProcessId>,
+    executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
     // mapping from non committed dep to pending dot
     phase_one_pending_index: PendingIndex,
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
+    to_execute: VecDeque<Command>,
     execute_at_commit: bool,
-
-    // these two usually live at the upper level, but since in caesar any
-    // executor may execute commands on any key, we need the kvs to be shared
-    // by all executors.
-    // TODO: since kvs operations are super fast, this should not be a
-    // bottleneck
-    store: Arc<Mutex<KVStore>>,
-    to_clients: VecDeque<ExecutorResult>,
 }
 
 impl PredecessorsGraph {
-    /// Create a new `PredecessorsGraph`.
-    pub fn new(
-        process_id: ProcessId,
-        shard_id: ShardId,
-        config: &Config,
-    ) -> Self {
+    /// Create a new `Graph`.
+    pub fn new(process_id: ProcessId, config: &Config) -> Self {
         // create executed clock and its snapshot
         let ids: Vec<_> =
             util::all_process_ids(config.shard_count(), config.n())
                 .map(|(process_id, _)| process_id)
                 .collect();
-        let committed_clock = Arc::new(RwLock::new(AEClock::with(ids.clone())));
-        let executed_clock = Arc::new(RwLock::new(AEClock::with(ids.clone())));
+        let committed_clock = AEClock::with(ids.clone());
+        let executed_clock = AEClock::with(ids.clone());
         // create indexes
-        let vertex_index = VertexIndex::new();
+        let vertex_index = VertexIndex::new(process_id);
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
+        // create to execute
+        let to_execute = VecDeque::new();
         let execute_at_commit = config.execute_at_commit();
-
-        // create kvs
-        let store = Arc::new(Mutex::new(KVStore::new(
-            config.executor_monitor_execution_order(),
-        )));
-        let to_clients = Default::default();
         PredecessorsGraph {
             process_id,
-            shard_id,
             executed_clock,
             committed_clock,
             vertex_index,
             phase_one_pending_index,
             phase_two_pending_index,
             metrics,
+            to_execute,
             execute_at_commit,
-            store,
-            to_clients,
         }
     }
 
     /// Returns a new command ready to be executed.
     #[must_use]
-    fn to_clients(&mut self) -> Option<ExecutorResult> {
-        self.to_clients.pop_front()
+    pub fn command_to_execute(&mut self) -> Option<Command> {
+        self.to_execute.pop_front()
+    }
+
+    #[cfg(test)]
+    fn commands_to_execute(&mut self) -> VecDeque<Command> {
+        std::mem::take(&mut self.to_execute)
     }
 
     fn committed_and_executed_frontiers(&self) -> (Committed, Executed) {
-        let committed = self.committed_clock.read().frontier();
-        let executed = self.executed_clock.read().frontier();
-        (committed, executed)
+        (
+            self.committed_clock.frontier(),
+            self.executed_clock.frontier(),
+        )
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.metrics
-    }
-
-    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
-        self.store.lock().monitor().cloned()
     }
 
     /// Add a new command.
@@ -118,7 +98,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CaesarDots>,
+        deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) {
         debug!(
@@ -151,7 +131,9 @@ impl PredecessorsGraph {
                 self.process_id,
                 self.committed_clock,
                 self.executed_clock,
-                self.vertex_index.dots(),
+                self.vertex_index
+                    .dots()
+                    .collect::<std::collections::BTreeSet<_>>(),
                 time.millis()
             );
         }
@@ -170,14 +152,13 @@ impl PredecessorsGraph {
             .vertex_index
             .find(&dot)
             .expect("command just indexed must exist");
-        let mut vertex = vertex_ref.write();
+        let mut vertex = vertex_ref.borrow_mut();
 
         // compute number of non yet committed dependencies
         let mut non_committed_deps_count = 0;
         for dep_dot in vertex.deps.iter() {
             let committed = self
                 .committed_clock
-                .read()
                 .contains(&dep_dot.source(), dep_dot.sequence());
 
             if !committed {
@@ -188,7 +169,7 @@ impl PredecessorsGraph {
                     time.millis()
                 );
                 non_committed_deps_count += 1;
-                self.phase_one_pending_index.index(&dep_dot, dot);
+                self.phase_one_pending_index.index(dot, *dep_dot);
             }
         }
 
@@ -206,7 +187,6 @@ impl PredecessorsGraph {
         } else {
             // move command to phase two
             drop(vertex);
-            drop(vertex_ref);
             self.move_to_phase_two(dot, time);
         }
     }
@@ -226,39 +206,41 @@ impl PredecessorsGraph {
             .vertex_index
             .find(&dot)
             .expect("command moved to phase two must exist");
-        let mut vertex = vertex_ref.write();
+        let mut vertex = vertex_ref.borrow_mut();
 
         // compute number of yet executed dependencies
         let mut non_executed_deps_count = 0;
         for dep_dot in vertex.deps.iter() {
-            trace!(
-                "p{}: Predecessors::move_2 non executed dep {:?} | time = {}",
-                self.process_id,
-                dep_dot,
-                time.millis()
-            );
-            // get the dependency and check its clock to see if it should be
-            // consider
-            if let Some(dep_ref) = self.vertex_index.find(&dep_dot) {
-                let dep = dep_ref.read();
-
-                // only consider this dep if it has a lower clock
-                if dep.clock < vertex.clock {
-                    trace!(
-                    "p{}: Predecessors::move_2 non executed dep with lower clock {:?} | time = {}",
+            // consider only non-executed dependencies with a lower clock
+            let executed = self
+                .executed_clock
+                .contains(&dep_dot.source(), dep_dot.sequence());
+            if !executed {
+                trace!(
+                    "p{}: Predecessors::move_2 non executed dep {:?} | time = {}",
                     self.process_id,
                     dep_dot,
                     time.millis()
                 );
+                // get the dependency and check its clock to see if it should be
+                // consider
+                let dep_ref = self
+                    .vertex_index
+                    .find(&dep_dot)
+                    .expect("non-executed dependency must exist");
+                let dep = dep_ref.borrow();
+
+                // only consider this dep if it has a lower clock
+                if dep.clock < vertex.clock {
+                    trace!(
+                        "p{}: Predecessors::move_2 non executed dep with lower clock {:?} | time = {}",
+                        self.process_id,
+                        dep_dot,
+                        time.millis()
+                    );
                     non_executed_deps_count += 1;
-                    self.phase_two_pending_index.index(&dep_dot, dot);
+                    self.phase_two_pending_index.index(dot, *dep_dot);
                 }
-            } else {
-                // if it's not indexed, then it must be already executed
-                trace!(
-                    "p{}: Predecessors::move_2 dependency {:?} of {:?} already executed",
-                    self.process_id, dep_dot, dot
-                );
             }
         }
 
@@ -276,7 +258,6 @@ impl PredecessorsGraph {
         } else {
             // save the command to be executed
             drop(vertex);
-            drop(vertex_ref);
             self.save_to_execute(dot, time);
         }
     }
@@ -286,9 +267,12 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CaesarDots>,
+        deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) {
+        // mark dot as committed
+        assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
+
         // create new vertex for this command and index it
         let vertex = Vertex::new(dot, cmd, clock, deps, time);
         if self.vertex_index.index(vertex).is_some() {
@@ -297,12 +281,6 @@ impl PredecessorsGraph {
                 self.process_id, dot
             );
         }
-
-        // mark dot as committed
-        assert!(self
-            .committed_clock
-            .write()
-            .add(&dot.source(), dot.sequence()));
     }
 
     fn try_phase_one_pending(&mut self, dot: Dot, time: &dyn SysTime) {
@@ -312,7 +290,7 @@ impl PredecessorsGraph {
                 .vertex_index
                 .find(&pending_dot)
                 .expect("command pending at phase one must exist");
-            let mut vertex = vertex_ref.write();
+            let mut vertex = vertex_ref.borrow_mut();
 
             // a non-committed dep became committed, so update the number of
             // missing deps at phase one
@@ -323,7 +301,6 @@ impl PredecessorsGraph {
             if vertex.get_missing_deps() == 0 {
                 // move command to phase two
                 drop(vertex);
-                drop(vertex_ref);
                 self.move_to_phase_two(pending_dot, time);
             }
         }
@@ -336,7 +313,7 @@ impl PredecessorsGraph {
                 .vertex_index
                 .find(&pending_dot)
                 .expect("command pending at phase two must exist");
-            let mut vertex = vertex_ref.write();
+            let mut vertex = vertex_ref.borrow_mut();
 
             // a non-executed dep became executed, so update the number of
             // missing deps at phase two
@@ -347,7 +324,6 @@ impl PredecessorsGraph {
             if vertex.get_missing_deps() == 0 {
                 // save the command to be executed
                 drop(vertex);
-                drop(vertex_ref);
                 self.save_to_execute(pending_dot, time);
             }
         }
@@ -374,7 +350,7 @@ impl PredecessorsGraph {
         self.metrics
             .collect(ExecutorMetricsKind::ExecutionDelay, duration_ms);
 
-        // execute the command
+        // mark dot as executed and add command to commands to be executed
         self.execute(dot, cmd, time);
 
         // try commands pending at phase two due to this command
@@ -389,16 +365,11 @@ impl PredecessorsGraph {
             _time.millis()
         );
 
-        // mark dot as executed.
-        assert!(self
-            .executed_clock
-            .write()
-            .add(&dot.source(), dot.sequence()));
+        // mark dot as executed
+        assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
 
-        // execute the command
-        let mut store = self.store.lock();
-        let results = cmd.execute(self.shard_id, &mut store);
-        self.to_clients.extend(results);
+        // add command to commands to be executed
+        self.to_execute.push_back(cmd);
     }
 }
 
@@ -430,8 +401,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::iter::FromIterator;
 
-    fn compressed_deps(deps: Vec<Dot>) -> Arc<CaesarDots> {
-        Arc::new(CaesarDots::from_iter(deps))
+    fn caesar_deps(deps: Vec<Dot>) -> Arc<CaesarDeps> {
+        Arc::new(CaesarDeps::from_iter(deps))
     }
 
     #[test]
@@ -441,9 +412,8 @@ mod tests {
         let p2 = 2;
         let n = 2;
         let f = 1;
-        let shard_id = 0;
         let config = Config::new(n, f);
-        let mut queue = PredecessorsGraph::new(p1, shard_id, &config);
+        let mut queue = PredecessorsGraph::new(p1, &config);
         let time = RunTime;
 
         // create dots
@@ -451,33 +421,30 @@ mod tests {
         let dot_1 = Dot::new(p2, 1);
 
         // cmd 0
-        let rifl0 = Rifl::new(1, 1);
         let cmd_0 = Command::from(
-            rifl0,
+            Rifl::new(1, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
         );
         let clock_0 = Clock::from(2, p1);
-        let deps_0 = compressed_deps(vec![dot_1]);
+        let deps_0 = caesar_deps(vec![dot_1]);
 
         // cmd 1
-        let rifl1 = Rifl::new(2, 1);
         let cmd_1 = Command::from(
-            rifl1,
+            Rifl::new(2, 1),
             vec![(String::from("A"), KVOp::Put(String::new()))],
         );
         let clock_1 = Clock::from(1, p2);
-        let deps_1 = compressed_deps(vec![dot_0]);
+        let deps_1 = caesar_deps(vec![dot_0]);
 
         // add cmd 0
         queue.add(dot_0, cmd_0.clone(), clock_0, deps_0, &time);
         // check commands ready to be executed
-        assert!(queue.to_clients().is_none());
+        assert!(queue.commands_to_execute().is_empty());
 
         // add cmd 1
         queue.add(dot_1, cmd_1.clone(), clock_1, deps_1, &time);
         // check commands ready to be executed
-        assert_eq!(queue.to_clients().map(|result| result.rifl), Some(rifl1));
-        assert_eq!(queue.to_clients().map(|result| result.rifl), Some(rifl0));
+        assert_eq!(queue.commands_to_execute(), vec![cmd_1, cmd_0]);
     }
 
     #[test]
@@ -495,7 +462,7 @@ mod tests {
     fn random_adds(
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDots>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDeps>)> {
         let mut rng = rand::thread_rng();
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
@@ -538,7 +505,7 @@ mod tests {
                     .expect("there must be a clock for each command");
 
                 // create empty deps
-                let deps = CaesarDots::new();
+                let deps = CaesarDeps::new();
 
                 (dot, (Some(keys), clock, RefCell::new(deps)))
             })
@@ -603,7 +570,7 @@ mod tests {
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDots>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDeps>)>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -615,14 +582,13 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDots>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDeps>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
         let f = 1;
-        let shard_id = 0;
         let config = Config::new(n, f);
-        let mut queue = PredecessorsGraph::new(process_id, shard_id, &config);
+        let mut queue = PredecessorsGraph::new(process_id, &config);
         let time = RunTime;
         let mut all_rifls = HashSet::new();
         let mut sorted = BTreeMap::new();
@@ -649,18 +615,24 @@ mod tests {
             queue.add(dot, cmd, clock, deps, &time);
 
             // get ready to execute
-            let to_clients = std::mem::take(&mut queue.to_clients);
+            let to_execute = queue.commands_to_execute();
 
             // for each command ready to be executed
-            to_clients.into_iter().for_each(|result| {
+            to_execute.iter().for_each(|cmd| {
                 // get its rifl
-                let rifl = result.rifl;
+                let rifl = cmd.rifl();
 
                 // remove it from the set of rifls
-                all_rifls.remove(&rifl);
+                assert!(all_rifls.remove(&cmd.rifl()));
 
                 // and add it to the sorted results
-                sorted.entry(result.key).or_insert_with(Vec::new).push(rifl);
+                cmd.keys(fantoch::command::DEFAULT_SHARD_ID)
+                    .for_each(|key| {
+                        sorted
+                            .entry(key.clone())
+                            .or_insert_with(Vec::new)
+                            .push(rifl);
+                    })
             });
         });
 
