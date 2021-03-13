@@ -5,7 +5,7 @@ mod locked;
 pub use locked::LockedKeyClocks;
 
 use super::Clock;
-use crate::protocol::common::pred::CompressedDots;
+use crate::protocol::common::pred::CaesarDots;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::HashSet;
@@ -39,7 +39,7 @@ pub trait KeyClocks: Debug + Clone {
         cmd: &Command,
         clock: Clock,
         higher: Option<&mut HashSet<Dot>>,
-    ) -> CompressedDots;
+    ) -> CaesarDots;
 
     fn parallel() -> bool;
 }

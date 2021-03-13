@@ -1,5 +1,5 @@
 use super::{Clock, KeyClocks};
-use crate::protocol::common::pred::CompressedDots;
+use crate::protocol::common::pred::CaesarDots;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::Key;
@@ -91,11 +91,11 @@ impl KeyClocks for LockedKeyClocks {
         cmd: &Command,
         clock: Clock,
         mut higher: Option<&mut HashSet<Dot>>,
-    ) -> CompressedDots {
+    ) -> CaesarDots {
         // TODO is this data structure ever GCed? otherwise the set that we
         // return here will grow unbounded as the more commands are processed in
         // the system
-        let mut predecessors = CompressedDots::new();
+        let mut predecessors = CaesarDots::new();
         cmd.keys(self.shard_id).for_each(|key| {
             self.apply_if_commands_contains_key(key, |commands| {
                 for (cmd_clock, cmd_dot) in commands.read().iter() {
@@ -172,8 +172,8 @@ mod tests {
         HashSet::from_iter(deps)
     }
 
-    fn compressed_deps(deps: Vec<Dot>) -> CompressedDots {
-        CompressedDots::from_iter(deps)
+    fn compressed_deps(deps: Vec<Dot>) -> CaesarDots {
+        CaesarDots::from_iter(deps)
     }
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
              cmd: &Command,
              clock: Clock,
              expected_blocking: HashSet<Dot>,
-             expected_predecessors: CompressedDots| {
+             expected_predecessors: CaesarDots| {
                 let mut blocking = HashSet::new();
                 let predecessors = key_clocks.predecessors(
                     dot,

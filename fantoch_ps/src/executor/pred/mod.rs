@@ -10,7 +10,7 @@ mod executor;
 pub use executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 
 use self::index::{PendingIndex, Vertex, VertexIndex};
-use crate::protocol::common::pred::{Clock, CompressedDots};
+use crate::protocol::common::pred::{Clock, CaesarDots};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -99,7 +99,11 @@ impl PredecessorsGraph {
     }
 
     fn executed_frontier(&self) -> Executed {
-        self.executed_clock.read().frontier().clone()
+        // TODO: caesar paper says that GC occurs once a command is committed
+        //       everywhere. we have found that correctness doesn't hold in that
+        //       case, and instead GC should occur once the command is executed
+        //       everywhere. here we keep what's said in the caesar paper.
+        self.committed_clock.read().frontier()
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -116,7 +120,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CompressedDots>,
+        deps: Arc<CaesarDots>,
         time: &dyn SysTime,
     ) {
         debug!(
@@ -284,7 +288,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CompressedDots>,
+        deps: Arc<CaesarDots>,
         time: &dyn SysTime,
     ) {
         // create new vertex for this command and index it
@@ -428,8 +432,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::iter::FromIterator;
 
-    fn compressed_deps(deps: Vec<Dot>) -> Arc<CompressedDots> {
-        Arc::new(CompressedDots::from_iter(deps))
+    fn compressed_deps(deps: Vec<Dot>) -> Arc<CaesarDots> {
+        Arc::new(CaesarDots::from_iter(deps))
     }
 
     #[test]
@@ -493,7 +497,7 @@ mod tests {
     fn random_adds(
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CompressedDots>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDots>)> {
         let mut rng = rand::thread_rng();
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
@@ -536,7 +540,7 @@ mod tests {
                     .expect("there must be a clock for each command");
 
                 // create empty deps
-                let deps = CompressedDots::new();
+                let deps = CaesarDots::new();
 
                 (dot, (Some(keys), clock, RefCell::new(deps)))
             })
@@ -601,7 +605,7 @@ mod tests {
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CompressedDots>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDots>)>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -613,7 +617,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CompressedDots>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDots>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;

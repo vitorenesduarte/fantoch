@@ -1,5 +1,5 @@
 use crate::executor::pred::PredecessorsGraph;
-use crate::protocol::common::pred::{Clock, CompressedDots};
+use crate::protocol::common::pred::{Clock, CaesarDots};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -83,7 +83,7 @@ pub struct PredecessorsExecutionInfo {
     dot: Dot,
     cmd: Command,
     clock: Clock,
-    deps: Arc<CompressedDots>,
+    deps: Arc<CaesarDots>,
 }
 
 impl PredecessorsExecutionInfo {
@@ -91,7 +91,7 @@ impl PredecessorsExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CompressedDots>,
+        deps: Arc<CaesarDots>,
     ) -> Self {
         Self {
             dot,

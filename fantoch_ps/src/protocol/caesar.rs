@@ -1,6 +1,6 @@
 use crate::executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 use crate::protocol::common::pred::{
-    Clock, CompressedDots, KeyClocks, LockedKeyClocks, QuorumClocks,
+    Clock, CaesarDots, KeyClocks, LockedKeyClocks, QuorumClocks,
     QuorumRetries,
 };
 use fantoch::command::Command;
@@ -33,12 +33,12 @@ pub struct Caesar<KC: KeyClocks> {
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_retries: HashMap<Dot, (ProcessId, Clock, CompressedDots)>,
+    buffered_retries: HashMap<Dot, (ProcessId, Clock, CaesarDots)>,
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_commits: HashMap<Dot, (ProcessId, Clock, CompressedDots)>,
+    buffered_commits: HashMap<Dot, (ProcessId, Clock, CaesarDots)>,
     // `try_to_unblock` calls to be repeated
-    try_to_unblock_again: Vec<(Dot, Clock, Arc<CompressedDots>, HashSet<Dot>)>,
+    try_to_unblock_again: Vec<(Dot, Clock, Arc<CaesarDots>, HashSet<Dot>)>,
     wait_condition: bool,
 }
 
@@ -494,7 +494,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: CompressedDots,
+        deps: CaesarDots,
         ok: bool,
         _time: &dyn SysTime,
     ) {
@@ -589,7 +589,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        mut deps: CompressedDots,
+        mut deps: CaesarDots,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -677,7 +677,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: CompressedDots,
+        deps: CaesarDots,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -746,7 +746,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        deps: CompressedDots,
+        deps: CaesarDots,
         _time: &dyn SysTime,
     ) {
         trace!(
@@ -899,7 +899,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         my_dot: Dot,
         my_clock: Clock,
         their_clock: Clock,
-        their_deps: &CompressedDots,
+        their_deps: &CaesarDots,
         _time: &dyn SysTime,
     ) -> bool {
         trace!(
@@ -924,7 +924,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         dot: Dot,
         clock: Clock,
-        deps: Arc<CompressedDots>,
+        deps: Arc<CaesarDots>,
         blocking: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
@@ -1118,7 +1118,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn send_mpropose_ack(
         dot: Dot,
         clock: Clock,
-        deps: CompressedDots,
+        deps: CaesarDots,
         ok: bool,
         to_processes: &mut Vec<Action<Self>>,
     ) {
@@ -1148,7 +1148,7 @@ struct CaesarInfo {
     // `None` if not set yet
     cmd: Option<Command>,
     clock: Clock,
-    deps: Arc<CompressedDots>,
+    deps: Arc<CaesarDots>,
     // set of commands that this command is blocking
     blocking: HashSet<Dot>,
     // set of commands that this command is blocked by
@@ -1179,7 +1179,7 @@ impl Info for CaesarInfo {
             status: Status::START,
             cmd: None,
             clock: Clock::new(process_id),
-            deps: Arc::new(CompressedDots::new()),
+            deps: Arc::new(CaesarDots::new()),
             blocking: HashSet::new(),
             blocked_by: HashSet::new(),
             quorum_clocks: QuorumClocks::new(
@@ -1206,25 +1206,25 @@ pub enum Message {
         dot: Dot,
         clock: Clock,
         #[serde(deserialize_with = "deserialize_caesar_deps")]
-        deps: CompressedDots,
+        deps: CaesarDots,
         ok: bool,
     },
     MCommit {
         dot: Dot,
         clock: Clock,
         #[serde(deserialize_with = "deserialize_caesar_deps")]
-        deps: CompressedDots,
+        deps: CaesarDots,
     },
     MRetry {
         dot: Dot,
         clock: Clock,
         #[serde(deserialize_with = "deserialize_caesar_deps")]
-        deps: CompressedDots,
+        deps: CaesarDots,
     },
     MRetryAck {
         dot: Dot,
         #[serde(deserialize_with = "deserialize_caesar_deps")]
-        deps: CompressedDots,
+        deps: CaesarDots,
     },
     MGarbageCollection {
         executed: VClock<ProcessId>,
@@ -1238,7 +1238,7 @@ pub enum Message {
 // (see here: https://github.com/serde-rs/serde/blob/9a84622c5648a91674708bad14e4c54fc7ca721c/serde/src/private/size_hint.rs#L13)
 fn deserialize_caesar_deps<'de, D>(
     deserializer: D,
-) -> Result<CompressedDots, D::Error>
+) -> Result<CaesarDots, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -1286,7 +1286,7 @@ where
     };
     deserializer
         .deserialize_seq(visitor)
-        .map(|deps| CompressedDots { deps })
+        .map(|deps| CaesarDots { deps })
 }
 
 impl MessageIndex for Message {

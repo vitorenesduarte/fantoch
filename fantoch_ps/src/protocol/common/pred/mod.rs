@@ -11,14 +11,12 @@ use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use std::iter::FromIterator;
 
-const MAX: usize = 100;
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CompressedDots {
+pub struct CaesarDots {
     pub deps: HashSet<Dot>,
 }
 
-impl CompressedDots {
+impl CaesarDots {
     pub fn new() -> Self {
         Self {
             deps: Default::default(),
@@ -26,9 +24,7 @@ impl CompressedDots {
     }
 
     pub fn insert(&mut self, dep: Dot) {
-        if self.len() < MAX {
-            self.deps.insert(dep);
-        }
+        self.deps.insert(dep);
     }
 
     pub fn remove(&mut self, dep: &Dot) {
@@ -54,7 +50,7 @@ impl CompressedDots {
     }
 }
 
-impl FromIterator<Dot> for CompressedDots {
+impl FromIterator<Dot> for CaesarDots {
     fn from_iter<T: IntoIterator<Item = Dot>>(iter: T) -> Self {
         let mut compressed_dots = Self::new();
         for dot in iter {

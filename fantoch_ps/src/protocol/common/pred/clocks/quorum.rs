@@ -1,5 +1,5 @@
 use super::Clock;
-use crate::protocol::common::pred::CompressedDots;
+use crate::protocol::common::pred::CaesarDots;
 use fantoch::id::ProcessId;
 use fantoch::HashSet;
 
@@ -14,7 +14,7 @@ pub struct QuorumClocks {
     // max of all `clock`s
     clock: Clock,
     // union of all predecessors
-    deps: CompressedDots,
+    deps: CaesarDots,
     // and of all `ok`s
     ok: bool,
 }
@@ -31,7 +31,7 @@ impl QuorumClocks {
             write_quorum_size,
             participants: HashSet::with_capacity(fast_quorum_size),
             clock: Clock::new(process_id),
-            deps: CompressedDots::new(),
+            deps: CaesarDots::new(),
             ok: true,
         }
     }
@@ -41,7 +41,7 @@ impl QuorumClocks {
         &mut self,
         process_id: ProcessId,
         clock: Clock,
-        deps: CompressedDots,
+        deps: CaesarDots,
         ok: bool,
     ) {
         assert!(self.participants.len() < self.fast_quorum_size);
@@ -69,7 +69,7 @@ impl QuorumClocks {
     }
 
     /// Returns the current aggregated result.
-    pub fn aggregated(&mut self) -> (Clock, CompressedDots, bool) {
+    pub fn aggregated(&mut self) -> (Clock, CaesarDots, bool) {
         // resets `this.deps` so that it can be returned without having to clone
         // it
         let deps = std::mem::take(&mut self.deps);
@@ -84,7 +84,7 @@ pub struct QuorumRetries {
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
     // union of all predecessors
-    deps: CompressedDots,
+    deps: CaesarDots,
 }
 
 impl QuorumRetries {
@@ -93,12 +93,12 @@ impl QuorumRetries {
         Self {
             write_quorum_size,
             participants: HashSet::with_capacity(write_quorum_size),
-            deps: CompressedDots::new(),
+            deps: CaesarDots::new(),
         }
     }
 
     /// Adds new `deps` reported by `process_id`.
-    pub fn add(&mut self, process_id: ProcessId, deps: CompressedDots) {
+    pub fn add(&mut self, process_id: ProcessId, deps: CaesarDots) {
         assert!(self.participants.len() < self.write_quorum_size);
 
         // record new participant
@@ -112,7 +112,7 @@ impl QuorumRetries {
     }
 
     /// Returns the current aggregated result.
-    pub fn aggregated(&mut self) -> CompressedDots {
+    pub fn aggregated(&mut self) -> CaesarDots {
         // resets `this.deps` so that it can be returned without having to clone
         // it
         std::mem::take(&mut self.deps)
@@ -135,13 +135,13 @@ mod tests {
         // agreement
         let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
         let clock_1 = Clock::from(10, 1);
-        let deps_1 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
+        let deps_1 = CaesarDots::from_iter(vec![Dot::new(1, 1)]);
         let ok_1 = true;
         let clock_2 = Clock::from(10, 2);
-        let deps_2 = CompressedDots::from_iter(vec![Dot::new(1, 2)]);
+        let deps_2 = CaesarDots::from_iter(vec![Dot::new(1, 2)]);
         let ok_2 = true;
         let clock_3 = Clock::from(10, 3);
-        let deps_3 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
+        let deps_3 = CaesarDots::from_iter(vec![Dot::new(1, 1)]);
         let ok_3 = true;
         quorum_clocks.add(1, clock_1, deps_1, ok_1);
         assert!(!quorum_clocks.all());
@@ -154,20 +154,20 @@ mod tests {
         assert_eq!(clock, Clock::from(10, 3));
         assert_eq!(
             deps,
-            CompressedDots::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
+            CaesarDots::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
         );
         assert!(ok);
 
         // disagreement
         let clock_1 = Clock::from(10, 1);
-        let deps_1 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
+        let deps_1 = CaesarDots::from_iter(vec![Dot::new(1, 1)]);
         let ok_1 = true;
         let clock_2 = Clock::from(12, 2);
         let deps_2 =
-            CompressedDots::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
+            CaesarDots::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
         let ok_2 = false;
         let clock_3 = Clock::from(10, 3);
-        let deps_3 = CompressedDots::from_iter(vec![Dot::new(1, 4)]);
+        let deps_3 = CaesarDots::from_iter(vec![Dot::new(1, 4)]);
         let ok_3 = true;
         // order: 1, 2
         let mut quorum_clocks = QuorumClocks::new(process_id, fq, mq);
@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(clock, Clock::from(12, 2));
         assert_eq!(
             deps,
-            CompressedDots::from_iter(vec![
+            CaesarDots::from_iter(vec![
                 Dot::new(1, 1),
                 Dot::new(1, 2),
                 Dot::new(1, 3)
@@ -201,7 +201,7 @@ mod tests {
         assert_eq!(clock, Clock::from(12, 2));
         assert_eq!(
             deps,
-            CompressedDots::from_iter(vec![
+            CaesarDots::from_iter(vec![
                 Dot::new(1, 1),
                 Dot::new(1, 2),
                 Dot::new(1, 3),
@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(clock, Clock::from(12, 2));
         assert_eq!(
             deps,
-            CompressedDots::from_iter(vec![
+            CaesarDots::from_iter(vec![
                 Dot::new(1, 2),
                 Dot::new(1, 3),
                 Dot::new(1, 4)
@@ -237,8 +237,8 @@ mod tests {
 
         // agreement
         let mut quorum_retries = QuorumRetries::new(mq);
-        let deps_1 = CompressedDots::from_iter(vec![Dot::new(1, 1)]);
-        let deps_2 = CompressedDots::from_iter(vec![Dot::new(1, 2)]);
+        let deps_1 = CaesarDots::from_iter(vec![Dot::new(1, 1)]);
+        let deps_2 = CaesarDots::from_iter(vec![Dot::new(1, 2)]);
         quorum_retries.add(1, deps_1);
         assert!(!quorum_retries.all());
         quorum_retries.add(2, deps_2);
@@ -247,7 +247,7 @@ mod tests {
         let deps = quorum_retries.aggregated();
         assert_eq!(
             deps,
-            CompressedDots::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
+            CaesarDots::from_iter(vec![Dot::new(1, 1), Dot::new(1, 2)])
         );
     }
 }

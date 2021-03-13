@@ -1,4 +1,4 @@
-use crate::protocol::common::pred::{Clock, CompressedDots};
+use crate::protocol::common::pred::{Clock, CaesarDots};
 use fantoch::command::Command;
 use fantoch::id::Dot;
 use fantoch::shared::{SharedMap, SharedMapRef};
@@ -13,7 +13,7 @@ pub struct Vertex {
     pub dot: Dot,
     pub cmd: Command,
     pub clock: Clock,
-    pub deps: Arc<CompressedDots>,
+    pub deps: Arc<CaesarDots>,
     pub start_time_ms: u64,
     missing_deps: usize,
 }
@@ -23,7 +23,7 @@ impl Vertex {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<CompressedDots>,
+        deps: Arc<CaesarDots>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time_ms = time.millis();
