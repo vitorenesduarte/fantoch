@@ -555,10 +555,10 @@ impl<KC: KeyClocks> Newt<KC> {
         mut votes: Votes,
         _time: &dyn SysTime,
     ) {
-        let id = self.id();
+        let _id = self.id();
         trace!(
             "p{}: MCommit({:?}, {}, {:?}) | time={}",
-            id,
+            _id,
             dot,
             clock,
             votes,
@@ -601,7 +601,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 .collect();
             trace!(
                 "p{}: MCommit({:?}) key {:?} | remaining keys {:?} | time={}",
-                id,
+                _id,
                 dot,
                 key,
                 remaining_keys,
