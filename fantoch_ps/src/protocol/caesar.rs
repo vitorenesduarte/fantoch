@@ -194,6 +194,11 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             committed,
             _time.micros()
         );
+        // TODO: this should use `executed` instead of `committed`. however, at
+        //       high loads, commands are not gced fast enough, and the process
+        //       runs out of memory; gcing earlier is incorrect and benefits
+        //       caesar performance (the set of deps is smaller), so this should
+        //       be fixed
         self.gc_track.update_clock(committed);
     }
 

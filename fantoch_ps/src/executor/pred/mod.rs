@@ -110,6 +110,9 @@ impl PredecessorsGraph {
             time.millis()
         );
 
+        // mark dot as committed
+        assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
+
         // we assume that commands to not depend on themselves
         assert!(!deps.contains(&dot));
 
@@ -270,9 +273,6 @@ impl PredecessorsGraph {
         deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) {
-        // mark dot as committed
-        assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
-
         // create new vertex for this command and index it
         let vertex = Vertex::new(dot, cmd, clock, deps, time);
         if self.vertex_index.index(vertex).is_some() {
