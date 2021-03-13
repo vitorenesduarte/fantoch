@@ -6,12 +6,11 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, Committed, Executed, GCTrack, Info,
+    Action, BaseProcess, Committed, EGCTrack, Executed, Info,
     LockedCommandsInfo, MessageIndex, Protocol, ProtocolMetrics,
     ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
-use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
@@ -19,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
-use threshold::VClock;
+use threshold::{AEClock, AboveExSet};
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
@@ -28,7 +27,7 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track: GCTrack,
+    gc_track: EGCTrack<AboveExSet>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
@@ -75,7 +74,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = EGCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
@@ -160,9 +159,9 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MRetryAck { dot, deps } => {
                 self.handle_mretryack(from, dot, deps, time)
             }
-            Message::MGarbageCollection { committed } => {
-                self.handle_mgc(from, committed, time)
-            }
+            Message::MGarbageCollection {
+                executed: committed,
+            } => self.handle_mgc(from, committed, time),
         }
 
         // every time a new message is processed, try to unblock commands that
@@ -814,28 +813,31 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        committed: VClock<ProcessId>,
+        executed: AEClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         trace!(
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
-            committed,
+            executed,
             from,
             _time.micros()
         );
 
         // update gc track and compute newly stable dots
-        self.gc_track.update_clock_of(from, committed);
+        self.gc_track.update_clock_of(from, executed);
         let stable = self.gc_track.stable();
 
         // since the dot info is shared across workers, we don't need to send
         // an MStable message to all the workers, as in the other protocols,
         // we can do it right here
         let mut stable_count = 0;
-        util::dots(stable).into_iter().for_each(|dot| {
-            stable_count += 1;
-            self.gc_command(dot)
+        stable.into_iter().for_each(|(process_id, events)| {
+            events.into_iter().for_each(|event| {
+                let dot = Dot::new(process_id, event);
+                self.gc_command(dot);
+                stable_count += 1;
+            })
         });
         trace!(
             "p{}: MGarbageCollection stable_count: {} | time={}",
@@ -855,12 +857,12 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        let executed = self.gc_track.clock().clone();
 
         // save new action
         self.to_processes.push(Action::ToSend {
             target: self.bp.all_but_me(),
-            msg: Message::MGarbageCollection { committed },
+            msg: Message::MGarbageCollection { executed },
         });
     }
 
@@ -1240,7 +1242,7 @@ pub enum Message {
         deps: CaesarDeps,
     },
     MGarbageCollection {
-        committed: VClock<ProcessId>,
+        executed: AEClock<ProcessId>,
     },
 }
 
@@ -1365,6 +1367,7 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
+    use fantoch::util;
 
     #[test]
     fn locked_caesar_test() {

@@ -320,7 +320,7 @@ impl Basic {
         trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        let committed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {

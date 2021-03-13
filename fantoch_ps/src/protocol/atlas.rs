@@ -693,7 +693,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         );
 
         // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        let committed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {

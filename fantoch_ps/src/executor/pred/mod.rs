@@ -83,8 +83,8 @@ impl PredecessorsGraph {
 
     fn committed_and_executed_frontiers(&self) -> (Committed, Executed) {
         (
-            self.committed_clock.frontier(),
-            self.executed_clock.frontier(),
+            self.committed_clock.clone(),
+            self.executed_clock.clone(),
         )
     }
 
