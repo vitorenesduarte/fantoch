@@ -1219,6 +1219,8 @@ pub enum Message {
     MGarbageCollection {
         committed: VClock<ProcessId>,
     },
+    // TODO: rename this to not confuse it with the actual `MStable` message in
+    //       the paper
     MStable {
         stable: Vec<(ProcessId, u64, u64)>,
     },
