@@ -5,7 +5,7 @@ use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use crate::id::{ClientId, Dot, ProcessId, ShardId};
 use crate::load_balance::*;
 use crate::protocol::{
-    Committed, Executed, MessageIndex, Protocol, ProtocolMetrics,
+    Executed, MessageIndex, Protocol, ProtocolMetrics,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -70,7 +70,7 @@ pub type ClientToServerReceiver = ChannelReceiver<ClientToServer>;
 pub type ServerToClientSender = ChannelSender<CommandResult>;
 pub type ExecutorResultReceiver = ChannelReceiver<ExecutorResult>;
 pub type ExecutorResultSender = ChannelSender<ExecutorResult>;
-pub type CommittedAndExecutedReceiver = ChannelReceiver<(Committed, Executed)>;
+pub type ExecutedReceiver = ChannelReceiver<Executed>;
 pub type SubmitReceiver = ChannelReceiver<(Option<Dot>, Command)>;
 pub type ExecutionInfoReceiver<P> =
     ChannelReceiver<<<P as Protocol>::Executor as Executor>::ExecutionInfo>;
@@ -157,8 +157,8 @@ where
 
 // 4. the worker `GC_WORKER_INDEX` receives executed notification messages from
 // executors
-pub type ExecutorsToWorkers = pool::ToPool<(Committed, Executed)>;
-impl pool::PoolIndex for (Committed, Executed) {
+pub type ExecutorsToWorkers = pool::ToPool<Executed>;
+impl pool::PoolIndex for Executed {
     fn index(&self) -> Option<(usize, usize)> {
         worker_index_no_shift(GC_WORKER_INDEX)
     }

@@ -36,7 +36,6 @@ use std::fmt::{self, Debug};
 use std::time::Duration;
 
 // Compact representation of which `Dot`s have been committed and executed.
-pub type Committed = ();
 pub type Executed = HashSet<Dot>;
 
 pub trait Protocol: Debug + Clone {
@@ -80,9 +79,8 @@ pub trait Protocol: Debug + Clone {
 
     fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime);
 
-    fn handle_committed_and_executed(
+    fn handle_executed(
         &mut self,
-        _committed: Committed,
         _executed: Executed,
         _time: &dyn SysTime,
     ) {

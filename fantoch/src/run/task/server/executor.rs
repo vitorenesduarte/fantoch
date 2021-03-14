@@ -302,10 +302,10 @@ async fn executed_notification_tick<P>(
     P: Protocol + 'static,
 {
     trace!("[executor] executed");
-    if let Some(committed_and_executed) = executor.committed_and_executed(time) {
-        if let Err(e) = executors_to_workers.forward(committed_and_executed).await {
+    if let Some(executed) = executor.executed(time) {
+        if let Err(e) = executors_to_workers.forward(executed).await {
             warn!(
-                "[executor] error while sending committed and executed to workers: {:?}",
+                "[executor] error while sending executed to workers: {:?}",
                 e
             );
         }

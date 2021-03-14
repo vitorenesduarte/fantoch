@@ -1,7 +1,7 @@
 use super::execution_logger;
 use crate::command::Command;
 use crate::id::{Dot, ProcessId, ShardId};
-use crate::protocol::{Action, Committed, Executed, Protocol};
+use crate::protocol::{Action, Executed, Protocol};
 use crate::run::prelude::*;
 use crate::run::task;
 use crate::time::RunTime;
@@ -19,7 +19,7 @@ pub fn start_processes<P, R>(
     reader_to_workers_rxs: Vec<ReaderReceiver<P>>,
     client_to_workers_rxs: Vec<SubmitReceiver>,
     periodic_to_workers_rxs: Vec<PeriodicEventReceiver<P, R>>,
-    executors_to_workers_rxs: Vec<CommittedAndExecutedReceiver>,
+    executors_to_workers_rxs: Vec<ExecutedReceiver>,
     to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: ReaderToWorkers<P>,
     to_executors: ToExecutors<P>,
@@ -99,7 +99,7 @@ async fn process_task<P, R>(
     mut from_readers: ReaderReceiver<P>,
     mut from_clients: SubmitReceiver,
     mut from_periodic: PeriodicEventReceiver<P, R>,
-    mut from_executors: CommittedAndExecutedReceiver,
+    mut from_executors: ExecutedReceiver,
     mut to_writers: HashMap<ProcessId, Vec<WriterSender<P>>>,
     mut reader_to_workers: ReaderToWorkers<P>,
     mut to_executors: ToExecutors<P>,
@@ -452,7 +452,7 @@ async fn handle_from_periodic_task<P, R>(
 
 async fn selected_from_executors<P>(
     worker_index: usize,
-    committed_and_executed: Option<(Committed, Executed)>,
+    executed: Option<Executed>,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -462,8 +462,8 @@ async fn selected_from_executors<P>(
 ) where
     P: Protocol + 'static,
 {
-    trace!("[server] from executors: {:?}", committed_and_executed);
-    if let Some(executed) = committed_and_executed {
+    trace!("[server] from executors: {:?}", executed);
+    if let Some(executed) = executed {
         handle_from_executors(
             worker_index,
             executed,
@@ -482,7 +482,7 @@ async fn selected_from_executors<P>(
 
 async fn handle_from_executors<P>(
     worker_index: usize,
-    (committed, executed): (Committed, Executed),
+    executed: Executed,
     process: &mut P,
     to_writers: &mut HashMap<ProcessId, Vec<WriterSender<P>>>,
     reader_to_workers: &mut ReaderToWorkers<P>,
@@ -492,7 +492,7 @@ async fn handle_from_executors<P>(
 ) where
     P: Protocol + 'static,
 {
-    process.handle_committed_and_executed(committed, executed, time);
+    process.handle_executed(executed, time);
     send_to_processes_and_executors(
         worker_index,
         process,

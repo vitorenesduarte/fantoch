@@ -6,7 +6,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, Committed, EGCTrack, Executed, Info,
+    Action, BaseProcess, EGCTrack, Executed, Info,
     LockedCommandsInfo, MessageIndex, Protocol, ProtocolMetrics,
     ProtocolMetricsKind,
 };
@@ -181,14 +181,13 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         }
     }
 
-    fn handle_committed_and_executed(
+    fn handle_executed(
         &mut self,
-        _committed: Committed,
         executed: Executed,
         _time: &dyn SysTime,
     ) {
         trace!(
-            "p{}: handle_committed_and_executed({:?}) | time={}",
+            "p{}: handle_executed({:?}) | time={}",
             self.id(),
             executed,
             _time.micros()
@@ -853,7 +852,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        // retrieve the committed clock
+        // retrieve the executed clock
         let executed = self.gc_track.clock().clone();
 
         // save new action
