@@ -86,7 +86,7 @@ impl PredecessorsGraph {
         std::mem::take(&mut self.to_execute)
     }
 
-    fn new_executed_dots(&self) -> Executed {
+    fn new_executed_dots(&mut self) -> Executed {
         std::mem::take(&mut self.new_executed_dots)
     }
 
