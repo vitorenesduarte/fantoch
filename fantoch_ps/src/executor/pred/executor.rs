@@ -66,15 +66,15 @@ impl Executor for PredecessorsExecutor {
         &mut self,
         _time: &dyn SysTime,
     ) -> Option<(Committed, Executed)> {
-        let committed_and_executed =
-            self.graph.committed_and_executed_frontiers();
+        let new_executed_dots =
+            self.graph.new_executed_dots();
         trace!(
             "p{}: PredecessorsExecutor::committed_and_executed {:?} | time = {}",
             self.process_id,
-            committed_and_executed,
+            new_executed_dots,
             _time.millis()
         );
-        Some(committed_and_executed)
+        Some(((), new_executed_dots))
     }
 
     fn parallel() -> bool {

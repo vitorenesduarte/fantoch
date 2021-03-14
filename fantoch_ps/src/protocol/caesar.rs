@@ -159,9 +159,9 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MRetryAck { dot, deps } => {
                 self.handle_mretryack(from, dot, deps, time)
             }
-            Message::MGarbageCollection {
-                executed,
-            } => self.handle_mgc(from, executed, time),
+            Message::MGarbageCollection { executed } => {
+                self.handle_mgc(from, executed, time)
+            }
         }
 
         // every time a new message is processed, try to unblock commands that
@@ -193,7 +193,9 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             executed,
             _time.micros()
         );
-        self.gc_track.update_clock(executed);
+        for dot in executed {
+            self.gc_track.add_to_clock(dot);
+        }
     }
 
     /// Returns a new action to be sent to other processes.

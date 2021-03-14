@@ -47,13 +47,6 @@ impl<E: EventSet> EGCTrack<E> {
         debug_assert_eq!(self.my_clock.len(), self.n);
     }
 
-    /// Updates local clock. It assumes that the clock passed as argument is
-    /// monotonic.
-    pub fn update_clock(&mut self, clock: AEClock<ProcessId>) {
-        self.my_clock = clock;
-        debug_assert_eq!(self.my_clock.len(), self.n);
-    }
-
     /// Records the set of commands by process `from`.
     pub fn update_clock_of(
         &mut self,

@@ -15,9 +15,10 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::{Dot, ProcessId};
-use fantoch::protocol::{Committed, Executed};
+use fantoch::protocol::Executed;
 use fantoch::time::SysTime;
 use fantoch::util;
+use fantoch::HashSet;
 use fantoch::{debug, trace};
 use std::collections::VecDeque;
 use std::fmt;
@@ -35,6 +36,8 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
+    // dots of new commands executed
+    new_executed_dots: HashSet<Dot>,
     to_execute: VecDeque<Command>,
     execute_at_commit: bool,
 }
@@ -54,6 +57,7 @@ impl PredecessorsGraph {
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
+        let new_executed_dots = HashSet::new();
         // create to execute
         let to_execute = VecDeque::new();
         let execute_at_commit = config.execute_at_commit();
@@ -65,6 +69,7 @@ impl PredecessorsGraph {
             phase_one_pending_index,
             phase_two_pending_index,
             metrics,
+            new_executed_dots,
             to_execute,
             execute_at_commit,
         }
@@ -81,11 +86,8 @@ impl PredecessorsGraph {
         std::mem::take(&mut self.to_execute)
     }
 
-    fn committed_and_executed_frontiers(&self) -> (Committed, Executed) {
-        (
-            self.committed_clock.clone(),
-            self.executed_clock.clone(),
-        )
+    fn new_executed_dots(&self) -> Executed {
+        std::mem::take(&mut self.new_executed_dots)
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -366,6 +368,7 @@ impl PredecessorsGraph {
         );
 
         // mark dot as executed
+        assert!(self.new_executed_dots.insert(dot));
         assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
 
         // add command to commands to be executed
