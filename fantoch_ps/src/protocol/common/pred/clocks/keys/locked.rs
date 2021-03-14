@@ -240,22 +240,17 @@ mod tests {
         let clock_3 = Clock::from(3, p1);
         let clock_4 = Clock::from(4, p1);
 
-        let check =
-            |key_clocks: &LockedKeyClocks,
-             cmd: &Command,
-             clock: Clock,
-             expected_blocking: HashSet<Dot>,
-             expected_predecessors: CaesarDeps| {
-                let mut blocking = HashSet::new();
-                let predecessors = key_clocks.predecessors(
-                    dot,
-                    cmd,
-                    clock,
-                    Some(&mut blocking),
-                );
-                assert_eq!(blocking, expected_blocking);
-                assert_eq!(predecessors, expected_predecessors);
-            };
+        let check = |key_clocks: &LockedKeyClocks,
+                     cmd: &Command,
+                     clock: Clock,
+                     expected_blocking: HashSet<Dot>,
+                     expected_predecessors: CaesarDeps| {
+            let mut blocking = HashSet::new();
+            let predecessors =
+                key_clocks.predecessors(dot, cmd, clock, Some(&mut blocking));
+            assert_eq!(blocking, expected_blocking);
+            assert_eq!(predecessors, expected_predecessors);
+        };
 
         // in the beginning, nothing is reported
         check(

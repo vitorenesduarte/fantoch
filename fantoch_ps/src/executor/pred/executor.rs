@@ -62,12 +62,8 @@ impl Executor for PredecessorsExecutor {
         self.to_clients.pop_front()
     }
 
-    fn executed(
-        &mut self,
-        _time: &dyn SysTime,
-    ) -> Option<Executed> {
-        let new_executed_dots =
-            self.graph.new_executed_dots();
+    fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
+        let new_executed_dots = self.graph.new_executed_dots();
         trace!(
             "p{}: PredecessorsExecutor::committed_and_executed {:?} | time = {}",
             self.process_id,

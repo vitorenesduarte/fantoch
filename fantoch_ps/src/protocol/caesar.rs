@@ -6,11 +6,11 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, EGCTrack, Executed, Info,
-    LockedCommandsInfo, MessageIndex, Protocol, ProtocolMetrics,
-    ProtocolMetricsKind,
+    Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
+    MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
+use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
@@ -18,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
-use threshold::{AEClock, AboveExSet};
+use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
@@ -27,7 +27,9 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track: EGCTrack<AboveExSet>,
+    gc_track: GCTrack,
+    // list of gced commands to be removed from `key_clocks`
+    gced: HashMap<Dot, (Command, Clock)>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
@@ -74,7 +76,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = EGCTrack::new(process_id, shard_id, config.n());
+        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gced = HashMap::new();
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
@@ -88,6 +91,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             key_clocks,
             cmds,
             gc_track,
+            gced,
             to_processes,
             to_executors,
             buffered_retries,
@@ -181,11 +185,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         }
     }
 
-    fn handle_executed(
-        &mut self,
-        executed: Executed,
-        _time: &dyn SysTime,
-    ) {
+    fn handle_executed(&mut self, executed: Executed, _time: &dyn SysTime) {
         trace!(
             "p{}: handle_executed({:?}) | time={}",
             self.id(),
@@ -671,9 +671,14 @@ impl<KC: KeyClocks> Caesar<KC> {
         drop(info_ref);
         self.try_to_unblock(dot, clock, deps, blocking, time);
 
+        // gc command right away
+        // TODO: this is incorrect as this info may be required for recovery
+        //       once implemented
+        self.gc_command(dot);
+
         // if we're not running gc, remove the dot info now
         if !self.gc_running() {
-            self.gc_command(dot);
+            self.gc_clock(dot);
         }
     }
 
@@ -809,7 +814,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        executed: AEClock<ProcessId>,
+        executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         trace!(
@@ -828,12 +833,9 @@ impl<KC: KeyClocks> Caesar<KC> {
         // an MStable message to all the workers, as in the other protocols,
         // we can do it right here
         let mut stable_count = 0;
-        stable.into_iter().for_each(|(process_id, events)| {
-            events.into_iter().for_each(|event| {
-                let dot = Dot::new(process_id, event);
-                self.gc_command(dot);
-                stable_count += 1;
-            })
+        util::dots(stable).for_each(|dot| {
+            self.gc_clock(dot);
+            stable_count += 1;
         });
         trace!(
             "p{}: MGarbageCollection stable_count: {} | time={}",
@@ -841,7 +843,6 @@ impl<KC: KeyClocks> Caesar<KC> {
             stable_count,
             _time.micros()
         );
-
         self.bp.stable(stable_count);
     }
 
@@ -853,7 +854,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // retrieve the executed clock
-        let executed = self.gc_track.clock().clone();
+        let executed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -898,11 +899,20 @@ impl<KC: KeyClocks> Caesar<KC> {
             // get the command
             let cmd = info.cmd.expect("command has been set");
 
-            // remove previous clock (if any)
-            Self::remove_clock(&mut self.key_clocks, &cmd, info.clock);
+            // save commnad as gced
+            assert!(self.gced.insert(dot, (cmd, info.clock)).is_none());
         } else {
             panic!("we're the single worker performing gc, so all commands should exist");
         }
+    }
+
+    fn gc_clock(&mut self, dot: Dot) {
+        let (cmd, clock) = self
+            .gced
+            .remove(&dot)
+            .expect("clock to be gced must belong to gced command");
+        // remove previous clock (if any)
+        Self::remove_clock(&mut self.key_clocks, &cmd, clock);
     }
 
     fn safe_to_ignore(
@@ -1238,7 +1248,7 @@ pub enum Message {
         deps: CaesarDeps,
     },
     MGarbageCollection {
-        executed: AEClock<ProcessId>,
+        executed: VClock<ProcessId>,
     },
 }
 

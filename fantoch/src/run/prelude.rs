@@ -4,9 +4,7 @@ use crate::command::{Command, CommandResult};
 use crate::executor::{Executor, ExecutorMetrics, ExecutorResult};
 use crate::id::{ClientId, Dot, ProcessId, ShardId};
 use crate::load_balance::*;
-use crate::protocol::{
-    Executed, MessageIndex, Protocol, ProtocolMetrics,
-};
+use crate::protocol::{Executed, MessageIndex, Protocol, ProtocolMetrics};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;

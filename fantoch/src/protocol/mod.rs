@@ -79,11 +79,7 @@ pub trait Protocol: Debug + Clone {
 
     fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime);
 
-    fn handle_executed(
-        &mut self,
-        _executed: Executed,
-        _time: &dyn SysTime,
-    ) {
+    fn handle_executed(&mut self, _executed: Executed, _time: &dyn SysTime) {
         // protocols interested in handling this type of notifications at the
         // worker `GC_WORKER_INDEX` (see fantoch::run::prelude) should overwrite
         // this
