@@ -160,8 +160,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
                 self.handle_mretryack(from, dot, deps, time)
             }
             Message::MGarbageCollection {
-                executed: committed,
-            } => self.handle_mgc(from, committed, time),
+                executed,
+            } => self.handle_mgc(from, executed, time),
         }
 
         // every time a new message is processed, try to unblock commands that
@@ -183,22 +183,17 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
 
     fn handle_committed_and_executed(
         &mut self,
-        committed: Committed,
-        _executed: Executed,
+        _committed: Committed,
+        executed: Executed,
         _time: &dyn SysTime,
     ) {
         trace!(
             "p{}: handle_committed_and_executed({:?}) | time={}",
             self.id(),
-            committed,
+            executed,
             _time.micros()
         );
-        // TODO: this should use `executed` instead of `committed`. however, at
-        //       high loads, commands are not gced fast enough, and the process
-        //       runs out of memory; gcing earlier is incorrect and benefits
-        //       caesar performance (the set of deps is smaller), so this should
-        //       be fixed
-        self.gc_track.update_clock(committed);
+        self.gc_track.update_clock(executed);
     }
 
     /// Returns a new action to be sent to other processes.
