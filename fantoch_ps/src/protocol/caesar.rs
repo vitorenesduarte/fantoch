@@ -9,6 +9,7 @@ use fantoch::protocol::{
     Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
     MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
+use fantoch::shared::SharedMap;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{singleton, trace};
@@ -29,7 +30,7 @@ pub struct Caesar<KC: KeyClocks> {
     cmds: LockedCommandsInfo<CaesarInfo>,
     gc_track: GCTrack,
     // list of gced commands to be removed from `key_clocks`
-    gced: HashMap<Dot, (Command, Clock)>,
+    gced: Arc<SharedMap<Dot, (Command, Clock)>>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
@@ -77,7 +78,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             write_quorum_size,
         );
         let gc_track = GCTrack::new(process_id, shard_id, config.n());
-        let gced = HashMap::new();
+        let gced = Arc::new(SharedMap::new());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
@@ -907,7 +908,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     }
 
     fn gc_clock(&mut self, dot: Dot) {
-        let (cmd, clock) = self
+        let (_, (cmd, clock)) = self
             .gced
             .remove(&dot)
             .expect("clock to be gced must belong to gced command");
