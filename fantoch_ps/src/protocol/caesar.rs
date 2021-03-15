@@ -6,10 +6,11 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, EGCTrack, Executed, Info, LockedCommandsInfo,
+    Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
     MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
+use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
@@ -17,7 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
-use threshold::AboveExSet;
+use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
@@ -26,7 +27,7 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track: EGCTrack<AboveExSet>,
+    gc_track: GCTrack,
     // dots of new commands executed
     new_executed_dots: Vec<Dot>,
     to_processes: Vec<Action<Self>>,
@@ -75,7 +76,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = EGCTrack::new(process_id, shard_id, config.n());
+        let gc_track = GCTrack::new(process_id, shard_id, config.n());
         let new_executed_dots = Vec::new();
         let to_processes = Vec::new();
         let to_executors = Vec::new();
@@ -809,7 +810,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        executed: Vec<Dot>,
+        executed: VClock<ProcessId>,
         _time: &dyn SysTime,
     ) {
         trace!(
@@ -821,19 +822,16 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // update gc track and compute newly stable dots
-        self.gc_track.add_to_clock_of(from, executed);
+        self.gc_track.update_clock_of(from, executed);
         let stable = self.gc_track.stable();
 
         // since the dot info is shared across workers, we don't need to send
         // an MStable message to all the workers, as in the other protocols,
         // we can do it right here
         let mut stable_count = 0;
-        stable.into_iter().for_each(|(process_id, events)| {
-            events.into_iter().for_each(|event| {
-                let dot = Dot::new(process_id, event);
-                self.gc_command(dot);
-                stable_count += 1;
-            })
+        util::dots(stable).for_each(|dot| {
+            self.gc_command(dot);
+            stable_count += 1;
         });
         trace!(
             "p{}: MGarbageCollection stable_count: {} | time={}",
@@ -852,7 +850,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // retrieve the executed clock
-        let executed = std::mem::take(&mut self.new_executed_dots);
+        let executed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -1237,7 +1235,7 @@ pub enum Message {
         deps: CaesarDeps,
     },
     MGarbageCollection {
-        executed: Vec<Dot>,
+        executed: VClock<ProcessId>,
     },
 }
 
