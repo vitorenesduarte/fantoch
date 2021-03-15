@@ -41,7 +41,7 @@ impl<E: EventSet> EGCTrack<E> {
     }
 
     /// Records this command.
-    pub fn add_to_clock(&mut self, dot: Dot) {
+    pub fn add_to_clock(&mut self, dot: &Dot) {
         self.my_clock.add(&dot.source(), dot.sequence());
         // make sure we don't record dots from other shards
         debug_assert_eq!(self.my_clock.len(), self.n);
@@ -215,7 +215,7 @@ mod tests {
         let dot13 = Dot::new(1, 3);
 
         // and commit dot12 locally
-        gc.add_to_clock(dot12);
+        gc.add_to_clock(&dot12);
 
         // this doesn't change anything
         assert_eq!(gc.clock().frontier(), vclock(0, 0));
@@ -223,7 +223,7 @@ mod tests {
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // however, if we also commit dot11, the committed clock will change
-        gc.add_to_clock(dot11);
+        gc.add_to_clock(&dot11);
         assert_eq!(gc.clock().frontier(), vclock(2, 0));
         assert_eq!(gc.stable_clock(), vclock(0, 0));
         assert_eq!(stable_dots(gc.stable()), vec![]);
@@ -235,8 +235,8 @@ mod tests {
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's commit dot11 and dot13 at process 2
-        gc2.add_to_clock(dot11);
-        gc2.add_to_clock(dot13);
+        gc2.add_to_clock(&dot11);
+        gc2.add_to_clock(&dot13);
 
         // now dot11 is stable at process 1
         gc.update_clock_of(2, gc2.clock().frontier());
@@ -249,8 +249,8 @@ mod tests {
         assert_eq!(stable_dots(gc.stable()), vec![]);
 
         // let's commit dot13 at process 1 and dot12 at process 2
-        gc.add_to_clock(dot13);
-        gc2.add_to_clock(dot12);
+        gc.add_to_clock(&dot13);
+        gc2.add_to_clock(&dot12);
 
         // now both dot12 and dot13 are stable at process 1
         gc.update_clock_of(2, gc2.clock().frontier());

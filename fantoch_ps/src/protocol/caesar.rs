@@ -191,10 +191,10 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             executed,
             _time.micros()
         );
-        self.new_executed_dots.extend(executed.clone());
-        for dot in executed {
+        for dot in executed.iter() {
             self.gc_track.add_to_clock(dot);
         }
+        self.new_executed_dots.extend(executed);
     }
 
     /// Returns a new action to be sent to other processes.

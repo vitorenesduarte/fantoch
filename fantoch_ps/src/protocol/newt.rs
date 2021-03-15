@@ -910,7 +910,7 @@ impl<KC: KeyClocks> Newt<KC> {
             _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
-        self.gc_track.add_to_clock(dot);
+        self.gc_track.add_to_clock(&dot);
     }
 
     fn handle_mgc(
