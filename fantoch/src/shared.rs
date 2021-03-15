@@ -48,6 +48,19 @@ where
         }
     }
 
+    // Assumes the key won't be prenset many times, and so it takes it a owned
+    // value.
+    pub fn get_or_pessimistic<F>(
+        &self,
+        key: K,
+        value: F,
+    ) -> SharedMapRef<'_, K, V>
+    where
+        F: Fn() -> V + Copy,
+    {
+        self.shared.entry(key).or_insert_with(value).downgrade()
+    }
+
     // Tries to retrieve the current value associated with `keys`. An entry will
     // be created for each of the non-existing keys.
     pub fn get_or_all<'k, 'd, F>(

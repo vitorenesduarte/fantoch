@@ -57,7 +57,7 @@ where
         let f = self.f;
         let fast_quorum_size = self.fast_quorum_size;
         let write_quorum_size = self.write_quorum_size;
-        self.dot_to_info.get_or(&dot, || {
+        self.dot_to_info.get_or_pessimistic(dot, || {
             let info = I::new(
                 process_id,
                 shard_id,
