@@ -70,6 +70,9 @@ impl QuorumClocks {
 
     /// Returns the current aggregated result.
     pub fn aggregated(&mut self) -> (Clock, CaesarDeps, bool) {
+        // clear unnecessary info
+        std::mem::take(&mut self.participants);
+
         // resets `this.deps` so that it can be returned without having to clone
         // it
         let deps = std::mem::take(&mut self.deps);
@@ -113,6 +116,9 @@ impl QuorumRetries {
 
     /// Returns the current aggregated result.
     pub fn aggregated(&mut self) -> CaesarDeps {
+        // clear unnecessary info
+        std::mem::take(&mut self.participants);
+
         // resets `this.deps` so that it can be returned without having to clone
         // it
         std::mem::take(&mut self.deps)

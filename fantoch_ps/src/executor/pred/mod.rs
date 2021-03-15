@@ -18,7 +18,6 @@ use fantoch::id::{Dot, ProcessId};
 use fantoch::protocol::Executed;
 use fantoch::time::SysTime;
 use fantoch::util;
-use fantoch::HashSet;
 use fantoch::{debug, trace};
 use std::collections::VecDeque;
 use std::fmt;
@@ -37,7 +36,7 @@ pub struct PredecessorsGraph {
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
     // dots of new commands executed
-    new_executed_dots: HashSet<Dot>,
+    new_executed_dots: Vec<Dot>,
     to_execute: VecDeque<Command>,
     execute_at_commit: bool,
 }
@@ -57,7 +56,7 @@ impl PredecessorsGraph {
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
-        let new_executed_dots = HashSet::new();
+        let new_executed_dots = Vec::new();
         // create to execute
         let to_execute = VecDeque::new();
         let execute_at_commit = config.execute_at_commit();
@@ -368,7 +367,7 @@ impl PredecessorsGraph {
         );
 
         // mark dot as executed
-        assert!(self.new_executed_dots.insert(dot));
+        self.new_executed_dots.push(dot);
         assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
 
         // add command to commands to be executed
