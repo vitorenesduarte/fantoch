@@ -22,7 +22,7 @@ dashmap = "4.0.0"
 flate2 = "1.0.19"
 futures = { version = "0.3.8", default-features = false, features = ["alloc"] }
 griddle = { version = "0.4.1", features = ["serde"], optional = true }
-hashbrown = { version = "0.9.1", features = ["serde", "ahash"] }
+hashbrown = { version = "0.11.0", features = ["serde", "ahash"] }
 parking_lot = "0.11.1"
 num_cpus = "1.13.0"
 rand = "0.8.0"
