@@ -4,10 +4,10 @@ use crate::util;
 use crate::HashMap;
 use threshold::{AEClock, AboveExSet, Clock, EventSet, MaxSet, VClock};
 
-pub type GCTrack = EGCTrack<MaxSet>;
+pub type VClockGCTrack = ClockGCTrack<MaxSet>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EGCTrack<E: EventSet> {
+pub struct ClockGCTrack<E: EventSet> {
     process_id: ProcessId,
     shard_id: ShardId,
     n: usize,
@@ -18,7 +18,7 @@ pub struct EGCTrack<E: EventSet> {
     previous_stable: Clock<ProcessId, E>,
 }
 
-impl<E: EventSet> EGCTrack<E> {
+impl<E: EventSet> ClockGCTrack<E> {
     pub fn new(process_id: ProcessId, shard_id: ShardId, n: usize) -> Self {
         // clocks from all processes but self
         let all_but_me = HashMap::with_capacity(n - 1);
@@ -81,7 +81,7 @@ impl<E: EventSet> EGCTrack<E> {
     }
 }
 
-impl EGCTrack<MaxSet> {
+impl ClockGCTrack<MaxSet> {
     /// Computes the new set of stable dots.
     pub fn stable(&mut self) -> Vec<(ProcessId, u64, u64)> {
         // compute new stable clock
@@ -147,7 +147,7 @@ impl EGCTrack<MaxSet> {
     }
 }
 
-impl EGCTrack<AboveExSet> {
+impl ClockGCTrack<AboveExSet> {
     /// Computes the new set of stable dots.
     pub fn stable(&mut self) -> std::collections::HashMap<ProcessId, Vec<u64>> {
         // compute new stable clock
@@ -199,10 +199,10 @@ mod tests {
         let n = 2;
         let shard_id = 0;
         // create new gc track for the our process: 1
-        let mut gc = GCTrack::new(1, shard_id, n);
+        let mut gc = VClockGCTrack::new(1, shard_id, n);
 
         // let's also create a gc track for process 2
-        let mut gc2 = GCTrack::new(2, shard_id, n);
+        let mut gc2 = VClockGCTrack::new(2, shard_id, n);
 
         // there's nothing committed and nothing stable
         assert_eq!(gc.clock().frontier(), vclock(0, 0));

@@ -6,7 +6,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
+    Action, BaseProcess, Executed, VClockGCTrack, Info, LockedCommandsInfo,
     MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
@@ -27,7 +27,7 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track: GCTrack,
+    gc_track: VClockGCTrack,
     committed: u64,
     executed: u64,
     // dots of new commands executed
@@ -78,7 +78,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = VClockGCTrack::new(process_id, shard_id, config.n());
         let committed = 0;
         let executed = 0;
         let new_executed_dots = Vec::new();
@@ -205,7 +205,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         for dot in executed.1.iter() {
             self.gc_track.add_to_clock(dot);
         }
-        // self.new_executed_dots.extend(executed.1);
+        self.new_executed_dots.extend(executed.1);
     }
 
     /// Returns a new action to be sent to other processes.
@@ -820,7 +820,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        executed: VClock<ProcessId>,
+        executed: Vec<Dot>,
         _time: &dyn SysTime,
     ) {
         trace!(

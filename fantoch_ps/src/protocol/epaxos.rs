@@ -7,7 +7,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
+    Action, BaseProcess, VClockGCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
@@ -25,7 +25,7 @@ pub struct EPaxos<KD: KeyDeps> {
     bp: BaseProcess,
     key_deps: KD,
     cmds: SequentialCommandsInfo<EPaxosInfo>,
-    gc_track: GCTrack,
+    gc_track: VClockGCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<GraphExecutionInfo>,
     // commit notifications that arrived before the initial `MCollect` message
@@ -66,7 +66,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = VClockGCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_commits = HashMap::new();
