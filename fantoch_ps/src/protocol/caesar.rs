@@ -849,7 +849,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        println!("SIZE: {}", self.cmds.len());
+        tracing::info!("SIZE: {}", self.cmds.len());
 
         // retrieve the executed clock
         let executed = self.gc_track.clock().frontier();
