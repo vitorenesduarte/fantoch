@@ -36,7 +36,7 @@ use std::fmt::{self, Debug};
 use std::time::Duration;
 
 // Compact representation of which `Dot`s have been committed and executed.
-pub type Executed = Vec<Dot>;
+pub type Executed = (u64, Vec<Dot>);
 
 pub trait Protocol: Debug + Clone {
     type Message: Debug

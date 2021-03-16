@@ -28,6 +28,8 @@ pub struct Caesar<KC: KeyClocks> {
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
     gc_track: GCTrack,
+    committed: u64,
+    executed: u64,
     // dots of new commands executed
     new_executed_dots: Vec<Dot>,
     to_processes: Vec<Action<Self>>,
@@ -77,6 +79,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             write_quorum_size,
         );
         let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let committed = 0;
+        let executed = 0;
         let new_executed_dots = Vec::new();
         let to_processes = Vec::new();
         let to_executors = Vec::new();
@@ -91,6 +95,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             key_clocks,
             cmds,
             gc_track,
+            committed,
+            executed,
             new_executed_dots,
             to_processes,
             to_executors,
@@ -192,10 +198,13 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             executed,
             _time.micros()
         );
-        for dot in executed.iter() {
+        // update committed and executed
+        self.committed = executed.0;
+        self.executed += executed.1.len() as u64;
+        for dot in executed.1.iter() {
             self.gc_track.add_to_clock(dot);
         }
-        self.new_executed_dots.extend(executed);
+        self.new_executed_dots.extend(executed.1);
     }
 
     /// Returns a new action to be sent to other processes.
@@ -849,7 +858,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        tracing::info!("SIZE: {}", self.cmds.len());
+        tracing::info!("SIZE: {:<10} | COMMITTED: {:<10} | EXECUTED: {:<10}", self.cmds.len(), self.committed, self.executed);
 
         // retrieve the executed clock
         let executed = self.gc_track.clock().frontier();
