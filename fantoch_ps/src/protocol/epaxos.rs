@@ -7,8 +7,8 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, VClockGCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics, SequentialCommandsInfo,
+    Action, BaseProcess, Info, MessageIndex, Protocol, ProtocolMetrics,
+    SequentialCommandsInfo, VClockGCTrack,
 };
 use fantoch::time::SysTime;
 use fantoch::{singleton, trace};

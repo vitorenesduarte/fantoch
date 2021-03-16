@@ -42,9 +42,11 @@ where
     {
         match self.shared.get(key) {
             Some(value) => value,
-            None => {
-                self.shared.entry(key.clone()).or_insert_with(value).downgrade()
-            }
+            None => self
+                .shared
+                .entry(key.clone())
+                .or_insert_with(value)
+                .downgrade(),
         }
     }
 

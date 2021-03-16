@@ -3,8 +3,8 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
-    Action, BaseProcess, VClockGCTrack, Info, MessageIndex, Protocol,
-    ProtocolMetrics, SequentialCommandsInfo,
+    Action, BaseProcess, Info, MessageIndex, Protocol, ProtocolMetrics,
+    SequentialCommandsInfo, VClockGCTrack,
 };
 use crate::singleton;
 use crate::time::SysTime;

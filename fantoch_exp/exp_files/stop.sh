@@ -24,7 +24,7 @@ stop_fantoch() {
     local cmd
 
     # stop process
-    cmd="pkill ${binary}"
+    cmd="pkill -9 ${binary}"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
     # wait for process to end
@@ -33,6 +33,7 @@ stop_fantoch() {
     while [[ ${running} != 0 ]]; do
         # shellcheck disable=SC2029
         running=$(ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null | xargs)
+        echo "waiting for ${binary} on ${machine}..."
         sleep 1
     done
 
@@ -49,7 +50,7 @@ stop_fantoch() {
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
     # remove files
-    cmd="rm -f *.metrics *.log *.err *.dstat.csv heaptrack.*.gz"
+    cmd="rm -f *.metrics *.log *.err *.dstat.csv heaptrack.*.gz *perf.data*"
     ssh "${SSH_ARGS}" ${machine} "${cmd}" </dev/null
 
     cmd="ls -ltrah | grep G"

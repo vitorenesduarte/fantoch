@@ -132,7 +132,7 @@ async fn baremetal_setup(
     )
     .await
     .wrap_err("hostname -I")?;
-    tracing::debug!("hostname -I: {:?}", ips);
+    tracing::info!("hostname -I of {}: {:?}", machine, ips);
 
     // hostname should return at least one ip like so "10.10.5.61 172.17.0.1"
     let parts: Vec<_> = ips.split(' ').collect();
