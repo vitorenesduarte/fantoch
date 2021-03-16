@@ -5,8 +5,9 @@ use std::collections::hash_map::RandomState;
 use std::collections::BTreeSet;
 use std::hash::Hash;
 
-// TODO: try https://docs.rs/lever/0.1.1/lever/table/lotable/struct.LOTable.html
+// TODO: - try https://docs.rs/lever/0.1.1/lever/table/lotable/struct.LOTable.html
 //       as an alternative to dashmap.
+//       - flurry is also an option
 
 pub type SharedMapIter<'a, K, V> =
     Iter<'a, K, V, RandomState, DashMap<K, V, RandomState>>;

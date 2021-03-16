@@ -15,9 +15,9 @@ impl BasicGCTrack {
         }
     }
 
-    /// Records this command, returning a bool indicating whethe it is stable.
+    /// Records this command, returning a bool indicating whether it is stable.
     #[must_use]
-    pub fn record(&mut self, dot: Dot) -> bool {
+    pub fn add(&mut self, dot: Dot) -> bool {
         let count = self.dot_to_count.entry(dot).or_default();
         *count += 1;
         if *count == self.n {

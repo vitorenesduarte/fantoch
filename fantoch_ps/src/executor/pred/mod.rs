@@ -35,7 +35,6 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
-    committed: u64,
     // dots of new commands executed
     new_executed_dots: Vec<Dot>,
     to_execute: VecDeque<Command>,
@@ -57,7 +56,6 @@ impl PredecessorsGraph {
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
-        let committed = 0;
         let new_executed_dots = Vec::new();
         // create to execute
         let to_execute = VecDeque::new();
@@ -70,7 +68,6 @@ impl PredecessorsGraph {
             phase_one_pending_index,
             phase_two_pending_index,
             metrics,
-            committed,
             new_executed_dots,
             to_execute,
             execute_at_commit,
@@ -89,7 +86,7 @@ impl PredecessorsGraph {
     }
 
     fn new_executed_dots(&mut self) -> Executed {
-        (self.committed, std::mem::take(&mut self.new_executed_dots))
+        std::mem::take(&mut self.new_executed_dots)
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -115,7 +112,6 @@ impl PredecessorsGraph {
         );
 
         // mark dot as committed
-        self.committed += 1;
         assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
 
         // we assume that commands to not depend on themselves

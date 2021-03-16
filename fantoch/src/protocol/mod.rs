@@ -20,7 +20,7 @@ mod gc;
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;
-pub use gc::{ClockGCTrack, BasicGCTrack, VClockGCTrack};
+pub use gc::{BasicGCTrack, ClockGCTrack, VClockGCTrack};
 pub use info::{Info, LockedCommandsInfo, SequentialCommandsInfo};
 
 use crate::command::Command;
@@ -36,7 +36,7 @@ use std::fmt::{self, Debug};
 use std::time::Duration;
 
 // Compact representation of which `Dot`s have been committed and executed.
-pub type Executed = (u64, Vec<Dot>);
+pub type Executed = Vec<Dot>;
 
 pub trait Protocol: Debug + Clone {
     type Message: Debug

@@ -65,7 +65,7 @@ impl Executor for PredecessorsExecutor {
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
         let new_executed_dots = self.graph.new_executed_dots();
         trace!(
-            "p{}: PredecessorsExecutor::committed_and_executed {:?} | time = {}",
+            "p{}: PredecessorsExecutor::executed {:?} | time = {}",
             self.process_id,
             new_executed_dots,
             _time.millis()
