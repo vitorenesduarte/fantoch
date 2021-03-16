@@ -201,7 +201,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         self.committed = executed.0;
         self.executed += executed.1.len() as u64;
         for dot in executed.1.iter() {
-            assert!(!self.gc_track.record(*dot));
+            self.gc_track_record(*dot);
         }
         self.new_executed_dots.extend(executed.1);
     }
@@ -831,12 +831,16 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // update gc track and compute newly stable dots
         for dot in executed {
-            let stable = self.gc_track.record(dot);
-            if stable {
-                self.to_processes.push(Action::ToForward {
-                    msg: Message::MGCDot { dot },
-                });
-            }
+            self.gc_track_record(dot);
+        }
+    }
+
+    fn gc_track_record(&mut self, dot: Dot) {
+        let stable = self.gc_track.record(dot);
+        if stable {
+            self.to_processes.push(Action::ToForward {
+                msg: Message::MGCDot { dot },
+            });
         }
     }
 
