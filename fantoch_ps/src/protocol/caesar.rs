@@ -858,7 +858,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        trace!(
+        tracing::info!(
             "{:?} | SIZE: {:<10} | COMMITTED: {:<10} | EXECUTED: {:<10}",
             _time.millis(),
             self.cmds.len(),
