@@ -42,23 +42,9 @@ where
         match self.shared.get(key) {
             Some(value) => value,
             None => {
-                self.maybe_insert(key, value);
-                return self.get_or(key, value);
+                self.shared.entry(key.clone()).or_insert_with(value).downgrade()
             }
         }
-    }
-
-    // Assumes the key won't be prenset many times, and so it takes it a owned
-    // value.
-    pub fn get_or_pessimistic<F>(
-        &self,
-        key: K,
-        value: F,
-    ) -> SharedMapRef<'_, K, V>
-    where
-        F: Fn() -> V + Copy,
-    {
-        self.shared.entry(key).or_insert_with(value).downgrade()
     }
 
     // Tries to retrieve the current value associated with `keys`. An entry will
