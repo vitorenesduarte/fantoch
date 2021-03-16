@@ -8,7 +8,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
+    Action, BaseProcess, VClockGCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
@@ -26,7 +26,7 @@ pub struct Atlas<KD: KeyDeps> {
     bp: BaseProcess,
     key_deps: KD,
     cmds: SequentialCommandsInfo<AtlasInfo>,
-    gc_track: GCTrack,
+    gc_track: VClockGCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<GraphExecutionInfo>,
     // set of processes in my shard
@@ -67,7 +67,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = VClockGCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let shard_processes =
@@ -640,7 +640,7 @@ impl<KD: KeyDeps> Atlas<KD> {
             _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
-        self.gc_track.add_to_clock(dot);
+        self.gc_track.add_to_clock(&dot);
     }
 
     fn handle_mgc(
@@ -693,7 +693,7 @@ impl<KD: KeyDeps> Atlas<KD> {
         );
 
         // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        let committed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {

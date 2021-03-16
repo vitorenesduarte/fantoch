@@ -24,7 +24,6 @@ pub struct GraphExecutor {
     config: Config,
     graph: DependencyGraph,
     store: KVStore,
-    monitor: Option<ExecutionOrderMonitor>,
     to_clients: VecDeque<ExecutorResult>,
     to_executors: Vec<(ShardId, GraphExecutionInfo)>,
 }
@@ -36,12 +35,7 @@ impl Executor for GraphExecutor {
         // this value will be overwritten
         let executor_index = 0;
         let graph = DependencyGraph::new(process_id, shard_id, &config);
-        let store = KVStore::new();
-        let monitor = if config.executor_monitor_execution_order() {
-            Some(ExecutionOrderMonitor::new())
-        } else {
-            None
-        };
+        let store = KVStore::new(config.executor_monitor_execution_order());
         let to_clients = Default::default();
         let to_executors = Default::default();
         Self {
@@ -51,7 +45,6 @@ impl Executor for GraphExecutor {
             config,
             graph,
             store,
-            monitor,
             to_clients,
             to_executors,
         }
@@ -115,8 +108,8 @@ impl Executor for GraphExecutor {
         &self.graph.metrics()
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
-        self.monitor.as_ref()
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
+        self.store.monitor().cloned()
     }
 }
 
@@ -190,8 +183,7 @@ impl GraphExecutor {
 
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results =
-            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
+        let results = cmd.execute(self.shard_id, &mut self.store);
         self.to_clients.extend(results);
     }
 }

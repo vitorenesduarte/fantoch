@@ -1,5 +1,5 @@
 use crate::executor::pred::PredecessorsGraph;
-use crate::protocol::common::pred::Clock;
+use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{
@@ -10,7 +10,6 @@ use fantoch::kvs::KVStore;
 use fantoch::protocol::{Executed, MessageIndex};
 use fantoch::time::SysTime;
 use fantoch::trace;
-use fantoch::HashSet;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -22,7 +21,6 @@ pub struct PredecessorsExecutor {
     config: Config,
     graph: PredecessorsGraph,
     store: KVStore,
-    monitor: Option<ExecutionOrderMonitor>,
     to_clients: VecDeque<ExecutorResult>,
 }
 
@@ -31,12 +29,7 @@ impl Executor for PredecessorsExecutor {
 
     fn new(process_id: ProcessId, shard_id: ShardId, config: Config) -> Self {
         let graph = PredecessorsGraph::new(process_id, &config);
-        let store = KVStore::new();
-        let monitor = if config.executor_monitor_execution_order() {
-            Some(ExecutionOrderMonitor::new())
-        } else {
-            None
-        };
+        let store = KVStore::new(config.executor_monitor_execution_order());
         let to_clients = Default::default();
         Self {
             process_id,
@@ -44,7 +37,6 @@ impl Executor for PredecessorsExecutor {
             config,
             graph,
             store,
-            monitor,
             to_clients,
         }
     }
@@ -71,34 +63,33 @@ impl Executor for PredecessorsExecutor {
     }
 
     fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
-        let executed = self.graph.executed().frontier().clone();
+        let new_executed_dots = self.graph.new_executed_dots();
         trace!(
             "p{}: PredecessorsExecutor::executed {:?} | time = {}",
             self.process_id,
-            executed,
+            new_executed_dots,
             _time.millis()
         );
-        Some(executed)
+        Some(new_executed_dots)
     }
 
     fn parallel() -> bool {
-        true
+        false
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
         &self.graph.metrics()
     }
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
-        self.monitor.as_ref()
+    fn monitor(&self) -> Option<ExecutionOrderMonitor> {
+        self.store.monitor().cloned()
     }
 }
 
 impl PredecessorsExecutor {
     fn execute(&mut self, cmd: Command) {
         // execute the command
-        let results =
-            cmd.execute(self.shard_id, &mut self.store, &mut self.monitor);
+        let results = cmd.execute(self.shard_id, &mut self.store);
         self.to_clients.extend(results);
     }
 }
@@ -108,7 +99,7 @@ pub struct PredecessorsExecutionInfo {
     dot: Dot,
     cmd: Command,
     clock: Clock,
-    deps: Arc<HashSet<Dot>>,
+    deps: Arc<CaesarDeps>,
 }
 
 impl PredecessorsExecutionInfo {
@@ -116,7 +107,7 @@ impl PredecessorsExecutionInfo {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CaesarDeps>,
     ) -> Self {
         Self {
             dot,

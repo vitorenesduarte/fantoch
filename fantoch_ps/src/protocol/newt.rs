@@ -9,7 +9,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
+    Action, BaseProcess, VClockGCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
 };
 use fantoch::time::SysTime;
@@ -30,7 +30,7 @@ pub struct Newt<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: SequentialCommandsInfo<NewtInfo>,
-    gc_track: GCTrack,
+    gc_track: VClockGCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<TableExecutionInfo>,
     // set of detached votes
@@ -81,7 +81,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = VClockGCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let detached = Votes::new();
@@ -555,10 +555,10 @@ impl<KC: KeyClocks> Newt<KC> {
         mut votes: Votes,
         _time: &dyn SysTime,
     ) {
-        let id = self.id();
+        let _id = self.id();
         trace!(
             "p{}: MCommit({:?}, {}, {:?}) | time={}",
-            id,
+            _id,
             dot,
             clock,
             votes,
@@ -601,7 +601,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 .collect();
             trace!(
                 "p{}: MCommit({:?}) key {:?} | remaining keys {:?} | time={}",
-                id,
+                _id,
                 dot,
                 key,
                 remaining_keys,
@@ -910,7 +910,7 @@ impl<KC: KeyClocks> Newt<KC> {
             _time.micros()
         );
         assert_eq!(from, self.bp.process_id);
-        self.gc_track.add_to_clock(dot);
+        self.gc_track.add_to_clock(&dot);
     }
 
     fn handle_mgc(
@@ -963,7 +963,7 @@ impl<KC: KeyClocks> Newt<KC> {
         );
 
         // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        let committed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {

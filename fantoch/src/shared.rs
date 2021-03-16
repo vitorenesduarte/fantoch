@@ -5,6 +5,10 @@ use std::collections::hash_map::RandomState;
 use std::collections::BTreeSet;
 use std::hash::Hash;
 
+// TODO: - try https://docs.rs/lever/0.1.1/lever/table/lotable/struct.LOTable.html
+//       as an alternative to dashmap.
+//       - flurry is also an option
+
 pub type SharedMapIter<'a, K, V> =
     Iter<'a, K, V, RandomState, DashMap<K, V, RandomState>>;
 
@@ -26,21 +30,20 @@ where
         Self { shared }
     }
 
-    pub fn get(&self, key: &K) -> Option<Ref<'_, K, V>> {
+    pub fn get(&self, key: &K) -> Option<SharedMapRef<'_, K, V>> {
         self.shared.get(key)
     }
 
     // Tries to retrieve the current value associated with `key`. If there's no
     // associated value, an entry will be created.
-    pub fn get_or<F>(&self, key: &K, value: F) -> Ref<'_, K, V>
+    pub fn get_or<F>(&self, key: &K, value: F) -> SharedMapRef<'_, K, V>
     where
         F: Fn() -> V + Copy,
     {
         match self.shared.get(key) {
             Some(value) => value,
             None => {
-                self.maybe_insert(key, value);
-                return self.get_or(key, value);
+                self.shared.entry(key.clone()).or_insert_with(value).downgrade()
             }
         }
     }
@@ -102,5 +105,9 @@ where
         // - `Entry::or_*` methods from `dashmap` ensure that we don't lose any
         //   updates. See: https://github.com/xacrimon/dashmap/issues/47
         self.shared.entry(key.clone()).or_insert_with(value);
+    }
+
+    pub fn len(&self) -> usize {
+        self.shared.len()
     }
 }

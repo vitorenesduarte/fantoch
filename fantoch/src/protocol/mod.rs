@@ -20,7 +20,7 @@ mod gc;
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;
-pub use gc::GCTrack;
+pub use gc::{BasicGCTrack, ClockGCTrack, VClockGCTrack};
 pub use info::{Info, LockedCommandsInfo, SequentialCommandsInfo};
 
 use crate::command::Command;
@@ -34,10 +34,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::time::Duration;
-use threshold::VClock;
 
-// Compact representation of which `Dot`s have been executed.
-pub type Executed = VClock<ProcessId>;
+// Compact representation of which `Dot`s have been committed and executed.
+pub type Executed = Vec<Dot>;
 
 pub trait Protocol: Debug + Clone {
     type Message: Debug

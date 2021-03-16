@@ -1,16 +1,15 @@
 use crate::executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 use crate::protocol::common::pred::{
-    Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
+    CaesarDeps, Clock, KeyClocks, LockedKeyClocks, QuorumClocks, QuorumRetries,
 };
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, Executed, GCTrack, Info, LockedCommandsInfo,
+    Action, BaseProcess, BasicGCTrack, Executed, Info, LockedCommandsInfo,
     MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
-use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
@@ -18,7 +17,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
-use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
@@ -27,17 +25,19 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track: GCTrack,
+    gc_track: BasicGCTrack,
+    // dots of new commands executed
+    new_executed_dots: Vec<Dot>,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<PredecessorsExecutionInfo>,
     // retry requests that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_retries: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    buffered_retries: HashMap<Dot, (ProcessId, Clock, CaesarDeps)>,
     // commit notifications that arrived before the initial `MPropose` message
     // (this may be possible even without network failures due to multiplexing)
-    buffered_commits: HashMap<Dot, (ProcessId, Clock, HashSet<Dot>)>,
+    buffered_commits: HashMap<Dot, (ProcessId, Clock, CaesarDeps)>,
     // `try_to_unblock` calls to be repeated
-    try_to_unblock_again: Vec<(Dot, Clock, Arc<HashSet<Dot>>, HashSet<Dot>)>,
+    try_to_unblock_again: Vec<(Dot, Clock, Arc<CaesarDeps>, HashSet<Dot>)>,
     wait_condition: bool,
 }
 
@@ -74,7 +74,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = BasicGCTrack::new(config.n());
+        let new_executed_dots = Vec::new();
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_retries = HashMap::new();
@@ -88,6 +89,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             key_clocks,
             cmds,
             gc_track,
+            new_executed_dots,
             to_processes,
             to_executors,
             buffered_retries,
@@ -162,6 +164,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MGarbageCollection { executed } => {
                 self.handle_mgc(from, executed, time)
             }
+            Message::MGCDot { dot } => self.handle_mgc_dot(dot, time),
         }
 
         // every time a new message is processed, try to unblock commands that
@@ -188,7 +191,11 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             executed,
             _time.micros()
         );
-        self.gc_track.update_clock(executed);
+        // update committed and executed
+        for dot in executed.iter() {
+            self.gc_track_add(*dot);
+        }
+        self.new_executed_dots.extend(executed);
     }
 
     /// Returns a new action to be sent to other processes.
@@ -493,7 +500,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CaesarDeps,
         ok: bool,
         _time: &dyn SysTime,
     ) {
@@ -588,7 +595,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        mut deps: HashSet<Dot>,
+        mut deps: CaesarDeps,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -676,7 +683,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         from: ProcessId,
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CaesarDeps,
         time: &dyn SysTime,
     ) {
         trace!(
@@ -720,7 +727,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             self.key_clocks.predecessors(dot, cmd, clock, blocking);
 
         // aggregate with incoming deps
-        new_deps.extend(deps);
+        new_deps.merge(deps);
 
         // create message and target
         let msg = Message::MRetryAck {
@@ -745,7 +752,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         from: ProcessId,
         dot: Dot,
-        deps: HashSet<Dot>,
+        deps: CaesarDeps,
         _time: &dyn SysTime,
     ) {
         trace!(
@@ -803,7 +810,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn handle_mgc(
         &mut self,
         from: ProcessId,
-        executed: VClock<ProcessId>,
+        executed: Vec<Dot>,
         _time: &dyn SysTime,
     ) {
         trace!(
@@ -813,24 +820,31 @@ impl<KC: KeyClocks> Caesar<KC> {
             from,
             _time.micros()
         );
-        self.gc_track.update_clock_of(from, executed);
 
-        // compute newly stable dots
-        let stable = self.gc_track.stable();
+        // update gc track and compute newly stable dots
+        for dot in executed {
+            self.gc_track_add(dot);
+        }
+    }
 
-        // since the dot info is shared across workers, we don't need to send
-        // an MStable message to all the workers, as in the other protocols,
-        // we can do it right here
-        let dots: Vec<_> = util::dots(stable).collect();
-        let stable_count = dots.len();
+    fn gc_track_add(&mut self, dot: Dot) {
+        let stable = self.gc_track.add(dot);
+        if stable {
+            self.to_processes.push(Action::ToForward {
+                msg: Message::MGCDot { dot },
+            });
+        }
+    }
+
+    fn handle_mgc_dot(&mut self, dot: Dot, _time: &dyn SysTime) {
         trace!(
-            "p{}: MGarbageCollection stable_count: {} | time={}",
+            "p{}: MGCDot({:?}) | time={}",
             self.id(),
-            stable_count,
+            dot,
             _time.micros()
         );
-        self.bp.stable(stable_count);
-        dots.into_iter().for_each(|dot| self.gc_command(dot));
+        self.gc_command(dot);
+        self.bp.stable(1);
     }
 
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
@@ -840,8 +854,8 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        // retrieve the executed clock
-        let executed = self.gc_track.clock();
+        // retrieve the executed dots
+        let executed = std::mem::take(&mut self.new_executed_dots);
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -884,10 +898,10 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn gc_command(&mut self, dot: Dot) {
         if let Some(info) = self.cmds.gc_single(&dot) {
             // get the command
-            let cmd = info.cmd.as_ref().expect("command has been set");
+            let cmd = info.cmd.expect("command has been set");
 
             // remove previous clock (if any)
-            Self::remove_clock(&mut self.key_clocks, cmd, info.clock);
+            Self::remove_clock(&mut self.key_clocks, &cmd, info.clock);
         } else {
             panic!("we're the single worker performing gc, so all commands should exist");
         }
@@ -898,7 +912,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         my_dot: Dot,
         my_clock: Clock,
         their_clock: Clock,
-        their_deps: &HashSet<Dot>,
+        their_deps: &CaesarDeps,
         _time: &dyn SysTime,
     ) -> bool {
         trace!(
@@ -923,7 +937,7 @@ impl<KC: KeyClocks> Caesar<KC> {
         &mut self,
         dot: Dot,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CaesarDeps>,
         blocking: HashSet<Dot>,
         time: &dyn SysTime,
     ) {
@@ -1117,7 +1131,7 @@ impl<KC: KeyClocks> Caesar<KC> {
     fn send_mpropose_ack(
         dot: Dot,
         clock: Clock,
-        deps: HashSet<Dot>,
+        deps: CaesarDeps,
         ok: bool,
         to_processes: &mut Vec<Action<Self>>,
     ) {
@@ -1147,7 +1161,7 @@ struct CaesarInfo {
     // `None` if not set yet
     cmd: Option<Command>,
     clock: Clock,
-    deps: Arc<HashSet<Dot>>,
+    deps: Arc<CaesarDeps>,
     // set of commands that this command is blocking
     blocking: HashSet<Dot>,
     // set of commands that this command is blocked by
@@ -1178,7 +1192,7 @@ impl Info for CaesarInfo {
             status: Status::START,
             cmd: None,
             clock: Clock::new(process_id),
-            deps: Arc::new(HashSet::new()),
+            deps: Arc::new(CaesarDeps::new()),
             blocking: HashSet::new(),
             blocked_by: HashSet::new(),
             quorum_clocks: QuorumClocks::new(
@@ -1204,29 +1218,33 @@ pub enum Message {
     MProposeAck {
         dot: Dot,
         clock: Clock,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CaesarDeps,
         ok: bool,
     },
     MCommit {
         dot: Dot,
         clock: Clock,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CaesarDeps,
     },
     MRetry {
         dot: Dot,
         clock: Clock,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CaesarDeps,
     },
     MRetryAck {
         dot: Dot,
-        #[serde(deserialize_with = "deserialize_deps")]
-        deps: HashSet<Dot>,
+        #[serde(deserialize_with = "deserialize_caesar_deps")]
+        deps: CaesarDeps,
     },
+    // GC messages
     MGarbageCollection {
-        executed: VClock<ProcessId>,
+        executed: Vec<Dot>,
+    },
+    MGCDot {
+        dot: Dot,
     },
 }
 
@@ -1235,9 +1253,10 @@ pub enum Message {
 // with the exception of the size hint which is not cautious (see DIFF below),
 // i.e. it doesn't limit the maximum size hint size to be 4096
 // (see here: https://github.com/serde-rs/serde/blob/9a84622c5648a91674708bad14e4c54fc7ca721c/serde/src/private/size_hint.rs#L13)
-fn deserialize_deps<'de, T, D>(deserializer: D) -> Result<HashSet<T>, D::Error>
+fn deserialize_caesar_deps<'de, D>(
+    deserializer: D,
+) -> Result<CaesarDeps, D::Error>
 where
-    T: Deserialize<'de> + Eq + std::hash::Hash,
     D: Deserializer<'de>,
 {
     use core::fmt;
@@ -1282,7 +1301,9 @@ where
     let visitor = SeqVisitor {
         marker: PhantomData,
     };
-    deserializer.deserialize_seq(visitor)
+    deserializer
+        .deserialize_seq(visitor)
+        .map(|deps| CaesarDeps { deps })
 }
 
 impl MessageIndex for Message {
@@ -1310,6 +1331,7 @@ impl MessageIndex for Message {
             Self::MGarbageCollection { .. } => {
                 worker_index_no_shift(GC_WORKER_INDEX)
             }
+            Self::MGCDot { dot } => worker_dot_index_shift(&dot),
         }
     }
 }
@@ -1348,6 +1370,7 @@ mod tests {
     use fantoch::planet::{Planet, Region};
     use fantoch::sim::Simulation;
     use fantoch::time::SimTime;
+    use fantoch::util;
 
     #[test]
     fn locked_caesar_test() {

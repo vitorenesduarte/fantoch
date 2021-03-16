@@ -82,7 +82,7 @@ pub trait Executor: Clone {
 
     fn metrics(&self) -> &ExecutorMetrics;
 
-    fn monitor(&self) -> Option<&ExecutionOrderMonitor>;
+    fn monitor(&self) -> Option<ExecutionOrderMonitor>;
 }
 
 pub struct ToClientsIter<'a, E> {

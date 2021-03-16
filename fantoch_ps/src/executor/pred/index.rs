@@ -1,4 +1,4 @@
-use crate::protocol::common::pred::Clock;
+use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
 use fantoch::hash_map::HashMap;
 use fantoch::id::{Dot, ProcessId};
@@ -12,7 +12,7 @@ pub struct Vertex {
     pub dot: Dot,
     pub cmd: Command,
     pub clock: Clock,
-    pub deps: Arc<HashSet<Dot>>,
+    pub deps: Arc<CaesarDeps>,
     pub start_time_ms: u64,
     missing_deps: usize,
 }
@@ -22,7 +22,7 @@ impl Vertex {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) -> Self {
         let start_time_ms = time.millis();

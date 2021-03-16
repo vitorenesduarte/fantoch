@@ -610,7 +610,7 @@ where
         &mut self,
     ) -> HashMap<ProcessId, Option<ExecutionOrderMonitor>> {
         self.check_processes_and_executors(|_process, executor| {
-            executor.monitor().cloned()
+            executor.monitor()
         })
     }
 

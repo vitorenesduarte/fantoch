@@ -302,8 +302,6 @@ async fn executed_notification_tick<P>(
     P: Protocol + 'static,
 {
     trace!("[executor] executed");
-    // TODO: if `executor.executed` takes `&self` instead of `&mut self`, rustc
-    // complains that `&P::Executor` is not `Send`; why is that?
     if let Some(executed) = executor.executed(time) {
         if let Err(e) = executors_to_workers.forward(executed).await {
             warn!(

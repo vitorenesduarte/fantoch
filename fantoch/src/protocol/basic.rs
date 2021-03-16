@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::executor::{BasicExecutionInfo, BasicExecutor, Executor};
 use crate::id::{Dot, ProcessId, ShardId};
 use crate::protocol::{
-    Action, BaseProcess, GCTrack, Info, MessageIndex, Protocol,
+    Action, BaseProcess, VClockGCTrack, Info, MessageIndex, Protocol,
     ProtocolMetrics, SequentialCommandsInfo,
 };
 use crate::singleton;
@@ -20,7 +20,7 @@ type ExecutionInfo = <BasicExecutor as Executor>::ExecutionInfo;
 pub struct Basic {
     bp: BaseProcess,
     cmds: SequentialCommandsInfo<BasicInfo>,
-    gc_track: GCTrack,
+    gc_track: VClockGCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<ExecutionInfo>,
     buffered_mcommits: HashSet<Dot>,
@@ -57,7 +57,7 @@ impl Protocol for Basic {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = GCTrack::new(process_id, shard_id, config.n());
+        let gc_track = VClockGCTrack::new(process_id, shard_id, config.n());
         let to_processes = Vec::new();
         let to_executors = Vec::new();
         let buffered_mcommits = HashSet::new();
@@ -284,7 +284,7 @@ impl Basic {
     fn handle_mcommit_dot(&mut self, from: ProcessId, dot: Dot) {
         trace!("p{}: MCommitDot({:?})", self.id(), dot);
         assert_eq!(from, self.bp.process_id);
-        self.gc_track.add_to_clock(dot);
+        self.gc_track.add_to_clock(&dot);
     }
 
     fn handle_mgc(&mut self, from: ProcessId, committed: VClock<ProcessId>) {
@@ -320,7 +320,7 @@ impl Basic {
         trace!("p{}: PeriodicEvent::GarbageCollection", self.id());
 
         // retrieve the committed clock
-        let committed = self.gc_track.clock();
+        let committed = self.gc_track.clock().frontier();
 
         // save new action
         self.to_processes.push(Action::ToSend {

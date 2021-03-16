@@ -1,5 +1,6 @@
+use crate::executor::ExecutionOrderMonitor;
 use crate::id::Rifl;
-use crate::{executor::ExecutionOrderMonitor, HashMap};
+use crate::HashMap;
 use serde::{Deserialize, Serialize};
 
 // Definition of `Key` and `Value` types.
@@ -20,31 +21,43 @@ pub type KVOpResult = Option<Value>;
 #[derive(Default, Clone)]
 pub struct KVStore {
     store: HashMap<Key, Value>,
+    monitor: Option<ExecutionOrderMonitor>,
 }
 
 impl KVStore {
     /// Creates a new `KVStore` instance.
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(monitor_execution_order: bool) -> Self {
+        let monitor = if monitor_execution_order {
+            Some(ExecutionOrderMonitor::new())
+        } else {
+            None
+        };
+        Self {
+            store: Default::default(),
+            monitor,
+        }
+    }
+
+    pub fn monitor(&self) -> Option<&ExecutionOrderMonitor> {
+        self.monitor.as_ref()
     }
 
     /// Executes `KVOp`s in the `KVStore`.
     #[cfg(test)]
-    pub fn execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
+    pub fn test_execute(&mut self, key: &Key, op: KVOp) -> KVOpResult {
         let mut results = self.do_execute(key, vec![op]);
         assert_eq!(results.len(), 1);
         results.pop().unwrap()
     }
 
-    pub fn execute_with_monitor(
+    pub fn execute(
         &mut self,
         key: &Key,
         ops: Vec<KVOp>,
         rifl: Rifl,
-        monitor: &mut Option<ExecutionOrderMonitor>,
     ) -> Vec<KVOpResult> {
         // update monitor, if we're monitoring
-        if let Some(monitor) = monitor {
+        if let Some(monitor) = self.monitor.as_mut() {
             monitor.add(&key, rifl);
         }
         self.do_execute(key, ops)
@@ -84,26 +97,27 @@ mod tests {
         let z = String::from("z");
 
         // store
-        let mut store = KVStore::new();
+        let monitor = false;
+        let mut store = KVStore::new(monitor);
 
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
         // get key_b    -> none
-        assert_eq!(store.execute(&key_b, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), None);
 
         // put key_a x -> none
-        assert_eq!(store.execute(&key_a, KVOp::Put(x.clone())), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Put(x.clone())), None);
         // get key_a    -> some(x)
-        assert_eq!(store.execute(&key_a, KVOp::Get), Some(x.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(x.clone()));
 
         // put key_b y -> none
-        assert_eq!(store.execute(&key_b, KVOp::Put(y.clone())), None);
+        assert_eq!(store.test_execute(&key_b, KVOp::Put(y.clone())), None);
         // get key_b    -> some(y)
-        assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // put key_a z -> some(x)
         assert_eq!(
-            store.execute(&key_a, KVOp::Put(z.clone())),
+            store.test_execute(&key_a, KVOp::Put(z.clone())),
             None,
             /*
             the following is correct if Put returns the previous value
@@ -111,34 +125,34 @@ mod tests {
              */
         );
         // get key_a    -> some(z)
-        assert_eq!(store.execute(&key_a, KVOp::Get), Some(z.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(z.clone()));
         // get key_b    -> some(y)
-        assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // delete key_a -> some(z)
-        assert_eq!(store.execute(&key_a, KVOp::Delete), Some(z.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(z.clone()));
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
         // get key_b    -> some(y)
-        assert_eq!(store.execute(&key_b, KVOp::Get), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y.clone()));
 
         // delete key_b -> some(y)
-        assert_eq!(store.execute(&key_b, KVOp::Delete), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Delete), Some(y.clone()));
         // get key_b    -> none
-        assert_eq!(store.execute(&key_b, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), None);
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
 
         // put key_a x -> none
-        assert_eq!(store.execute(&key_a, KVOp::Put(x.clone())), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Put(x.clone())), None);
         // get key_a    -> some(x)
-        assert_eq!(store.execute(&key_a, KVOp::Get), Some(x.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(x.clone()));
         // get key_b    -> none
-        assert_eq!(store.execute(&key_b, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), None);
 
         // delete key_a -> some(x)
-        assert_eq!(store.execute(&key_a, KVOp::Delete), Some(x.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(x.clone()));
         // get key_a    -> none
-        assert_eq!(store.execute(&key_a, KVOp::Get), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
     }
 }

@@ -475,8 +475,6 @@ mod tests {
 
     #[test]
     fn run_caesar_3_1_wait_locked_test() {
-        // caesar locked can handle as many workers as we want but only one
-        // executor
         let workers = 4;
         let executors = 1;
         let _slow_paths = run_test::<CaesarLocked>(
@@ -492,8 +490,6 @@ mod tests {
     #[ignore]
     #[test]
     fn run_caesar_5_2_wait_locked_test() {
-        // caesar locked can handle as many workers as we want but only one
-        // executor
         let workers = 4;
         let executors = 1;
         let _slow_paths = run_test::<CaesarLocked>(

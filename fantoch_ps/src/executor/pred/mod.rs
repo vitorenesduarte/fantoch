@@ -10,14 +10,14 @@ mod executor;
 pub use executor::{PredecessorsExecutionInfo, PredecessorsExecutor};
 
 use self::index::{PendingIndex, Vertex, VertexIndex};
-use crate::protocol::common::pred::Clock;
+use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::{Dot, ProcessId};
+use fantoch::protocol::Executed;
 use fantoch::time::SysTime;
 use fantoch::util;
-use fantoch::HashSet;
 use fantoch::{debug, trace};
 use std::collections::VecDeque;
 use std::fmt;
@@ -35,6 +35,8 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
+    // dots of new commands executed
+    new_executed_dots: Vec<Dot>,
     to_execute: VecDeque<Command>,
     execute_at_commit: bool,
 }
@@ -54,6 +56,7 @@ impl PredecessorsGraph {
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
+        let new_executed_dots = Vec::new();
         // create to execute
         let to_execute = VecDeque::new();
         let execute_at_commit = config.execute_at_commit();
@@ -65,6 +68,7 @@ impl PredecessorsGraph {
             phase_one_pending_index,
             phase_two_pending_index,
             metrics,
+            new_executed_dots,
             to_execute,
             execute_at_commit,
         }
@@ -81,8 +85,8 @@ impl PredecessorsGraph {
         std::mem::take(&mut self.to_execute)
     }
 
-    fn executed(&self) -> &AEClock<ProcessId> {
-        &self.executed_clock
+    fn new_executed_dots(&mut self) -> Executed {
+        std::mem::take(&mut self.new_executed_dots)
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -95,7 +99,7 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) {
         debug!(
@@ -106,6 +110,9 @@ impl PredecessorsGraph {
             deps,
             time.millis()
         );
+
+        // mark dot as committed
+        assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
 
         // we assume that commands to not depend on themselves
         assert!(!deps.contains(&dot));
@@ -264,12 +271,9 @@ impl PredecessorsGraph {
         dot: Dot,
         cmd: Command,
         clock: Clock,
-        deps: Arc<HashSet<Dot>>,
+        deps: Arc<CaesarDeps>,
         time: &dyn SysTime,
     ) {
-        // mark dot as committed
-        assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
-
         // create new vertex for this command and index it
         let vertex = Vertex::new(dot, cmd, clock, deps, time);
         if self.vertex_index.index(vertex).is_some() {
@@ -363,6 +367,7 @@ impl PredecessorsGraph {
         );
 
         // mark dot as executed
+        self.new_executed_dots.push(dot);
         assert!(self.executed_clock.add(&dot.source(), dot.sequence()));
 
         // add command to commands to be executed
@@ -389,7 +394,7 @@ mod tests {
     use fantoch::id::{ClientId, Rifl};
     use fantoch::kvs::{KVOp, Key};
     use fantoch::time::RunTime;
-    use fantoch::HashMap;
+    use fantoch::{HashMap, HashSet};
     use permutator::{Combination, Permutation};
     use rand::seq::SliceRandom;
     use rand::Rng;
@@ -398,8 +403,8 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::iter::FromIterator;
 
-    fn deps(deps: Vec<Dot>) -> Arc<HashSet<Dot>> {
-        Arc::new(HashSet::from_iter(deps))
+    fn caesar_deps(deps: Vec<Dot>) -> Arc<CaesarDeps> {
+        Arc::new(CaesarDeps::from_iter(deps))
     }
 
     #[test]
@@ -423,7 +428,7 @@ mod tests {
             vec![(String::from("A"), KVOp::Put(String::new()))],
         );
         let clock_0 = Clock::from(2, p1);
-        let deps_0 = deps(vec![dot_1]);
+        let deps_0 = caesar_deps(vec![dot_1]);
 
         // cmd 1
         let cmd_1 = Command::from(
@@ -431,7 +436,7 @@ mod tests {
             vec![(String::from("A"), KVOp::Put(String::new()))],
         );
         let clock_1 = Clock::from(1, p2);
-        let deps_1 = deps(vec![dot_0]);
+        let deps_1 = caesar_deps(vec![dot_0]);
 
         // add cmd 0
         queue.add(dot_0, cmd_0.clone(), clock_0, deps_0, &time);
@@ -459,7 +464,7 @@ mod tests {
     fn random_adds(
         n: usize,
         events_per_process: usize,
-    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)> {
+    ) -> Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDeps>)> {
         let mut rng = rand::thread_rng();
         let mut possible_keys: Vec<_> =
             ('A'..='D').map(|key| key.to_string()).collect();
@@ -502,7 +507,7 @@ mod tests {
                     .expect("there must be a clock for each command");
 
                 // create empty deps
-                let deps = HashSet::new();
+                let deps = CaesarDeps::new();
 
                 (dot, (Some(keys), clock, RefCell::new(deps)))
             })
@@ -567,7 +572,7 @@ mod tests {
 
     fn shuffle_it(
         n: usize,
-        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)>,
+        mut args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDeps>)>,
     ) {
         let total_order = check_termination(n, args.clone());
         args.permutation().for_each(|permutation| {
@@ -579,7 +584,7 @@ mod tests {
 
     fn check_termination(
         n: usize,
-        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<HashSet<Dot>>)>,
+        args: Vec<(Dot, Option<BTreeSet<Key>>, Clock, Arc<CaesarDeps>)>,
     ) -> BTreeMap<Key, Vec<Rifl>> {
         // create queue
         let process_id = 1;
