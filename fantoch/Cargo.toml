@@ -27,7 +27,7 @@ parking_lot = "0.11.1"
 num_cpus = "1.13.0"
 rand = "0.8.0"
 serde = { version = "1.0.118", features = ["derive", "rc"] }
-threshold = "0.9.0"
+threshold = "0.9.1"
 tokio = { version = "1.0.2", features = ["full", "parking_lot"], optional = true }
 tokio-util = { version = "0.6.0", features = ["codec"], optional = true }
 tracing = "0.1.22"
