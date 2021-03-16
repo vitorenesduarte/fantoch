@@ -172,6 +172,9 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             Message::MGarbageCollection { executed } => {
                 self.handle_mgc(from, executed, time)
             }
+            Message::MGCDot { dot } => {
+                self.handle_mgc_dot(dot, time)
+            }
         }
 
         // every time a new message is processed, try to unblock commands that
@@ -836,19 +839,23 @@ impl<KC: KeyClocks> Caesar<KC> {
 
         // since the dot info is shared across workers, we don't need to send
         // an MStable message to all the workers, as in the other protocols,
-        // we can do it right here
-        let mut stable_count = 0;
+        // we could do it right here; however we instead spread the load
         util::dots(stable).for_each(|dot| {
-            self.gc_command(dot);
-            stable_count += 1;
+            self.to_processes.push(Action::ToForward {
+                msg: Message::MGCDot { dot },
+            });
         });
+    }
+
+    fn handle_mgc_dot(&mut self, dot: Dot, _time: &dyn SysTime) {
         trace!(
-            "p{}: MGarbageCollection stable_count: {} | time={}",
+            "p{}: MGCDot({:?}) | time={}",
             self.id(),
-            stable_count,
+            dot,
             _time.micros()
         );
-        self.bp.stable(stable_count);
+        self.gc_command(dot);
+        self.bp.stable(1);
     }
 
     fn handle_event_garbage_collection(&mut self, _time: &dyn SysTime) {
@@ -1251,8 +1258,12 @@ pub enum Message {
         #[serde(deserialize_with = "deserialize_caesar_deps")]
         deps: CaesarDeps,
     },
+    // GC messages
     MGarbageCollection {
         executed: VClock<ProcessId>,
+    },
+    MGCDot {
+        dot: Dot,
     },
 }
 
@@ -1339,6 +1350,7 @@ impl MessageIndex for Message {
             Self::MGarbageCollection { .. } => {
                 worker_index_no_shift(GC_WORKER_INDEX)
             }
+            Self::MGCDot { dot } => worker_dot_index_shift(&dot),
         }
     }
 }
