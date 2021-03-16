@@ -6,11 +6,10 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, Executed, VClockGCTrack, Info, LockedCommandsInfo,
+    Action, BaseProcess, BasicGCTrack, Executed, Info, LockedCommandsInfo,
     MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
-use fantoch::util;
 use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
@@ -18,7 +17,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
-use threshold::VClock;
 
 pub type CaesarLocked = Caesar<LockedKeyClocks>;
 
@@ -27,7 +25,7 @@ pub struct Caesar<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
-    gc_track: VClockGCTrack,
+    gc_track: BasicGCTrack,
     committed: u64,
     executed: u64,
     // dots of new commands executed
@@ -78,7 +76,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let gc_track = VClockGCTrack::new(process_id, shard_id, config.n());
+        let gc_track = BasicGCTrack::new(config.n());
         let committed = 0;
         let executed = 0;
         let new_executed_dots = Vec::new();
@@ -203,7 +201,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         self.committed = executed.0;
         self.executed += executed.1.len() as u64;
         for dot in executed.1.iter() {
-            self.gc_track.add_to_clock(dot);
+            assert!(!self.gc_track.record(*dot));
         }
         self.new_executed_dots.extend(executed.1);
     }
@@ -832,17 +830,14 @@ impl<KC: KeyClocks> Caesar<KC> {
         );
 
         // update gc track and compute newly stable dots
-        self.gc_track.update_clock_of(from, executed);
-        let stable = self.gc_track.stable();
-
-        // since the dot info is shared across workers, we don't need to send
-        // an MStable message to all the workers, as in the other protocols,
-        // we could do it right here; however we instead spread the load
-        util::dots(stable).for_each(|dot| {
-            self.to_processes.push(Action::ToForward {
-                msg: Message::MGCDot { dot },
-            });
-        });
+        for dot in executed {
+            let stable = self.gc_track.record(dot);
+            if stable {
+                self.to_processes.push(Action::ToForward {
+                    msg: Message::MGCDot { dot },
+                });
+            }
+        }
     }
 
     fn handle_mgc_dot(&mut self, dot: Dot, _time: &dyn SysTime) {
@@ -871,8 +866,8 @@ impl<KC: KeyClocks> Caesar<KC> {
             self.executed
         );
 
-        // retrieve the executed clock
-        let executed = self.gc_track.clock().frontier();
+        // retrieve the executed dots
+        let executed = std::mem::take(&mut self.new_executed_dots);
 
         // save new action
         self.to_processes.push(Action::ToSend {
@@ -1258,7 +1253,7 @@ pub enum Message {
     },
     // GC messages
     MGarbageCollection {
-        executed: VClock<ProcessId>,
+        executed: Vec<Dot>,
     },
     MGCDot {
         dot: Dot,

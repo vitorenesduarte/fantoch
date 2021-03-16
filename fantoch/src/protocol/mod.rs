@@ -20,7 +20,7 @@ mod gc;
 // Re-exports.
 pub use base::BaseProcess;
 pub use basic::Basic;
-pub use gc::{ClockGCTrack, VClockGCTrack};
+pub use gc::{ClockGCTrack, BasicGCTrack, VClockGCTrack};
 pub use info::{Info, LockedCommandsInfo, SequentialCommandsInfo};
 
 use crate::command::Command;
