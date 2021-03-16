@@ -119,4 +119,8 @@ where
         //   updates. See: https://github.com/xacrimon/dashmap/issues/47
         self.shared.entry(key.clone()).or_insert_with(value);
     }
+
+    pub fn len(&self) -> usize {
+        self.shared.len()
+    }
 }

@@ -77,4 +77,8 @@ where
             .remove(dot)
             .map(|(_dot, lock)| lock.into_inner())
     }
+
+    pub fn len(&self) -> usize {
+        self.dot_to_info.len()
+    }
 }
