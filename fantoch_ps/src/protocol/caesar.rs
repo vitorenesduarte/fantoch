@@ -191,7 +191,7 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         }
     }
 
-    fn handle_committed_and_executed(
+    fn handle_executed(
         &mut self,
         committed_and_executed: CommittedAndExecuted,
         _time: &dyn SysTime,
