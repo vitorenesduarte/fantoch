@@ -1226,6 +1226,7 @@ pub fn throughput_latency_plot_split<GInput, G, RInput, R>(
     y_range: Option<(f64, f64)>,
     y_log_scale: bool,
     x_bbox_to_anchor: Option<f64>,
+    legend_column_spacing: Option<f64>,
     left_margin: Option<f64>,
     witdh_reduction: Option<f64>,
     output_dir: Option<&str>,
@@ -1311,7 +1312,7 @@ where
                     None,
                     x_bbox_to_anchor,
                     y_bbox_to_anchor,
-                    None,
+                    legend_column_spacing,
                     py,
                     &ax,
                 )?;

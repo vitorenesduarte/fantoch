@@ -27,7 +27,8 @@ const EXPERIMENT_TIMEOUTS: ExperimentTimeouts = ExperimentTimeouts {
 };
 
 // latency dir
-const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
+const LATENCY_AWS: &str = "../latency_aws/2020_06_05";
+// const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
 
 // aws experiment config
 const LAUCH_MODE: LaunchMode = LaunchMode::OnDemand;
@@ -51,7 +52,7 @@ const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "bump_on_mconsensus";
+const BRANCH: &str = "master";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;

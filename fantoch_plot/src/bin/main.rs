@@ -10,8 +10,8 @@ use fantoch_plot::{
 use std::collections::HashMap;
 
 // latency dir
-const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
-// const LATENCY_AWS: &str = "../latency_aws/2020_06_05";
+// const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
+const LATENCY_AWS: &str = "../latency_aws/2020_06_05";
 
 // folder where all plots will be stored
 const PLOT_DIR: Option<&str> = Some("plots");
@@ -33,9 +33,9 @@ fn main() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    fairness_plot()?;
-    tail_latency_plot()?;
-    // increasing_load_plot()?;
+    // fairness_plot()?;
+    // tail_latency_plot()?;
+    increasing_load_plot()?;
     // batching_plot()?;
     // scalability_plot()?;
     // partial_replication_plot()?;
@@ -191,9 +191,8 @@ fn tail_latency_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
-    // let results_dir =
-    //     "/home/vitor.enes/eurosys_results/results_increasing_load";
-    let results_dir = "../results_increasing_load";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_increasing_load";
 
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
@@ -293,7 +292,8 @@ fn increasing_load_plot() -> Result<(), Report> {
     let x_range = None;
     let y_range = Some((100.0, 1500.0));
     let y_log_scale = true;
-    let x_bbox_to_anchor = None;
+    let x_bbox_to_anchor = Some(0.48);
+    let legend_column_spacing = Some(1.25);
     let left_margin = None;
     let width_reduction = None;
     let path = String::from("plot_increasing_load.pdf");
@@ -311,6 +311,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         y_range,
         y_log_scale,
         x_bbox_to_anchor,
+        legend_column_spacing,
         left_margin,
         width_reduction,
         PLOT_DIR,
@@ -409,6 +410,7 @@ fn batching_plot() -> Result<(), Report> {
         let y_range = Some((100.0, 2000.0));
         let y_log_scale = true;
         let x_bbox_to_anchor = None;
+        let legend_column_spacing = None;
         let left_margin = None;
         let width_reduction = None;
         let path =
@@ -427,6 +429,7 @@ fn batching_plot() -> Result<(), Report> {
             y_range,
             y_log_scale,
             x_bbox_to_anchor,
+            legend_column_spacing,
             left_margin,
             width_reduction,
             PLOT_DIR,
@@ -621,6 +624,7 @@ fn partial_replication_plot() -> Result<(), Report> {
         let y_range = Some((140.0, 310.0));
         let y_log_scale = false;
         let x_bbox_to_anchor = Some(0.45);
+        let legend_column_spacing = None;
         let left_margin = Some(0.15);
         let width_reduction = Some(1.75);
         let path = format!(
@@ -643,6 +647,7 @@ fn partial_replication_plot() -> Result<(), Report> {
             y_range,
             y_log_scale,
             x_bbox_to_anchor,
+            legend_column_spacing,
             left_margin,
             width_reduction,
             PLOT_DIR,
@@ -1308,7 +1313,8 @@ fn multi_key_all() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
-    let results_dir = "../results_increasing_load";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_increasing_load";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
@@ -1336,6 +1342,9 @@ fn single_key_all() -> Result<(), Report> {
     // generate throughput-latency plot
     let clients_per_region = vec![
         32,
+        64,
+        128,
+        256,
         256,
         512,
         1024,
