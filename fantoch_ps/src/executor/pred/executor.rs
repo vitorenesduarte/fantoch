@@ -7,7 +7,7 @@ use fantoch::executor::{
 };
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::kvs::KVStore;
-use fantoch::protocol::{Executed, MessageIndex};
+use fantoch::protocol::{CommittedAndExecuted, MessageIndex};
 use fantoch::time::SysTime;
 use fantoch::trace;
 use serde::{Deserialize, Serialize};
@@ -62,15 +62,15 @@ impl Executor for PredecessorsExecutor {
         self.to_clients.pop_front()
     }
 
-    fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
-        let new_executed_dots = self.graph.new_executed_dots();
+    fn executed(&mut self, _time: &dyn SysTime) -> Option<CommittedAndExecuted> {
+        let committed_and_executed = self.graph.committed_and_executed();
         trace!(
             "p{}: PredecessorsExecutor::executed {:?} | time = {}",
             self.process_id,
-            new_executed_dots,
+            committed_and_executed,
             _time.millis()
         );
-        Some(new_executed_dots)
+        Some(committed_and_executed)
     }
 
     fn parallel() -> bool {

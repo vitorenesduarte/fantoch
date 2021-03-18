@@ -15,7 +15,7 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::executor::{ExecutorMetrics, ExecutorMetricsKind};
 use fantoch::id::{Dot, ProcessId};
-use fantoch::protocol::Executed;
+use fantoch::protocol::CommittedAndExecuted;
 use fantoch::time::SysTime;
 use fantoch::util;
 use fantoch::{debug, trace};
@@ -35,6 +35,8 @@ pub struct PredecessorsGraph {
     // mapping from committed (but not executed) dep to pending dot
     phase_two_pending_index: PendingIndex,
     metrics: ExecutorMetrics,
+    // count of committed commands
+    new_committed_dots: u64,
     // dots of new commands executed
     new_executed_dots: Vec<Dot>,
     to_execute: VecDeque<Command>,
@@ -56,6 +58,7 @@ impl PredecessorsGraph {
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();
+        let new_committed_dots = 0;
         let new_executed_dots = Vec::new();
         // create to execute
         let to_execute = VecDeque::new();
@@ -68,6 +71,7 @@ impl PredecessorsGraph {
             phase_one_pending_index,
             phase_two_pending_index,
             metrics,
+            new_committed_dots,
             new_executed_dots,
             to_execute,
             execute_at_commit,
@@ -85,8 +89,11 @@ impl PredecessorsGraph {
         std::mem::take(&mut self.to_execute)
     }
 
-    fn new_executed_dots(&mut self) -> Executed {
-        std::mem::take(&mut self.new_executed_dots)
+    fn committed_and_executed(&mut self) -> CommittedAndExecuted {
+        (
+            std::mem::take(&mut self.new_committed_dots),
+            std::mem::take(&mut self.new_executed_dots),
+        )
     }
 
     fn metrics(&self) -> &ExecutorMetrics {
@@ -112,6 +119,7 @@ impl PredecessorsGraph {
         );
 
         // mark dot as committed
+        self.new_committed_dots += 1;
         assert!(self.committed_clock.add(&dot.source(), dot.sequence()));
 
         // we assume that commands to not depend on themselves

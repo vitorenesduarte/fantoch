@@ -6,11 +6,12 @@ use fantoch::command::Command;
 use fantoch::config::Config;
 use fantoch::id::{Dot, ProcessId, ShardId};
 use fantoch::protocol::{
-    Action, BaseProcess, BasicGCTrack, Executed, Info, LockedCommandsInfo,
-    MessageIndex, Protocol, ProtocolMetrics, ProtocolMetricsKind,
+    Action, BaseProcess, BasicGCTrack, CommittedAndExecuted, Info,
+    LockedCommandsInfo, MessageIndex, Protocol, ProtocolMetrics,
+    ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
-use fantoch::{singleton, trace};
+use fantoch::{info, singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -26,6 +27,8 @@ pub struct Caesar<KC: KeyClocks> {
     key_clocks: KC,
     cmds: LockedCommandsInfo<CaesarInfo>,
     gc_track: BasicGCTrack,
+    committed_dots: u64,
+    executed_dots: u64,
     // dots of new commands executed
     new_executed_dots: Vec<Dot>,
     to_processes: Vec<Action<Self>>,
@@ -75,6 +78,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             write_quorum_size,
         );
         let gc_track = BasicGCTrack::new(config.n());
+        let committed_dots = 0;
+        let executed_dots = 0;
         let new_executed_dots = Vec::new();
         let to_processes = Vec::new();
         let to_executors = Vec::new();
@@ -89,6 +94,8 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
             key_clocks,
             cmds,
             gc_track,
+            committed_dots,
+            executed_dots,
             new_executed_dots,
             to_processes,
             to_executors,
@@ -184,18 +191,25 @@ impl<KC: KeyClocks> Protocol for Caesar<KC> {
         }
     }
 
-    fn handle_executed(&mut self, executed: Executed, _time: &dyn SysTime) {
+    fn handle_committed_and_executed(
+        &mut self,
+        committed_and_executed: CommittedAndExecuted,
+        _time: &dyn SysTime,
+    ) {
         trace!(
-            "p{}: handle_executed({:?}) | time={}",
+            "p{}: handle_committed_and_executed({:?}) | time={}",
             self.id(),
-            executed,
+            committed_and_executed,
             _time.micros()
         );
+        let (new_committed_dots, new_executed_dots) = committed_and_executed;
         // update committed and executed
-        for dot in executed.iter() {
+        for dot in new_executed_dots.iter() {
             self.gc_track_add(*dot);
         }
-        self.new_executed_dots.extend(executed);
+        self.committed_dots += new_committed_dots;
+        self.executed_dots += new_executed_dots.len() as u64;
+        self.new_executed_dots.extend(new_executed_dots);
     }
 
     /// Returns a new action to be sent to other processes.
@@ -809,7 +823,7 @@ impl<KC: KeyClocks> Caesar<KC> {
 
     fn handle_mgc(
         &mut self,
-        from: ProcessId,
+        _from: ProcessId,
         executed: Vec<Dot>,
         _time: &dyn SysTime,
     ) {
@@ -817,7 +831,7 @@ impl<KC: KeyClocks> Caesar<KC> {
             "p{}: MGarbageCollection({:?}) from {} | time={}",
             self.id(),
             executed,
-            from,
+            _from,
             _time.micros()
         );
 
@@ -852,6 +866,13 @@ impl<KC: KeyClocks> Caesar<KC> {
             "p{}: PeriodicEvent::GarbageCollection | time={}",
             self.id(),
             _time.micros()
+        );
+
+        info!(
+            "COMMITTED {:>20} EXECUTED {:>20} EXISTING {:>20}",
+            self.committed_dots,
+            self.executed_dots,
+            self.cmds.len()
         );
 
         // retrieve the executed dots

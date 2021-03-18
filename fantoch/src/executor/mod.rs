@@ -17,7 +17,7 @@ use crate::config::Config;
 use crate::id::{ProcessId, Rifl, ShardId};
 use crate::kvs::{KVOpResult, Key};
 use crate::metrics::Metrics;
-use crate::protocol::{Executed, MessageIndex};
+use crate::protocol::{CommittedAndExecuted, MessageIndex};
 use crate::time::SysTime;
 use crate::util;
 use serde::de::DeserializeOwned;
@@ -71,7 +71,7 @@ pub trait Executor: Clone {
     }
 
     #[must_use]
-    fn executed(&mut self, _time: &dyn SysTime) -> Option<Executed> {
+    fn executed(&mut self, _time: &dyn SysTime) -> Option<CommittedAndExecuted> {
         // protocols that are interested in notifying the worker
         // `GC_WORKER_INDEX` (see fantoch::run::prelude) with these executed
         // notifications should overwrite this

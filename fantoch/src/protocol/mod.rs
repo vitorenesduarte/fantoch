@@ -36,7 +36,7 @@ use std::fmt::{self, Debug};
 use std::time::Duration;
 
 // Compact representation of which `Dot`s have been committed and executed.
-pub type Executed = Vec<Dot>;
+pub type CommittedAndExecuted = (u64, Vec<Dot>);
 
 pub trait Protocol: Debug + Clone {
     type Message: Debug
@@ -79,7 +79,7 @@ pub trait Protocol: Debug + Clone {
 
     fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime);
 
-    fn handle_executed(&mut self, _executed: Executed, _time: &dyn SysTime) {
+    fn handle_executed(&mut self, _committed_and_executed: CommittedAndExecuted, _time: &dyn SysTime) {
         // protocols interested in handling this type of notifications at the
         // worker `GC_WORKER_INDEX` (see fantoch::run::prelude) should overwrite
         // this
