@@ -11,7 +11,7 @@ use fantoch::protocol::{
     ProtocolMetricsKind,
 };
 use fantoch::time::SysTime;
-use fantoch::{info, singleton, trace};
+use fantoch::{singleton, trace};
 use fantoch::{HashMap, HashSet};
 use parking_lot::MutexGuard;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -868,8 +868,9 @@ impl<KC: KeyClocks> Caesar<KC> {
             _time.micros()
         );
 
-        info!(
-            "COMMITTED {:>20} EXECUTED {:>20} EXISTING {:>20}",
+        trace!(
+            "p{}: COMMITTED {:>20} EXECUTED {:>20} EXISTING {:>20}",
+            self.id(),
             self.committed_dots,
             self.executed_dots,
             self.cmds.len()
