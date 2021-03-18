@@ -273,6 +273,12 @@ impl<KC: KeyClocks> Newt<KC> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
+        // record command size
+        self.bp.collect_metric(
+            fantoch::protocol::ProtocolMetricsKind::CommandKeyCount,
+            cmd.total_key_count() as u64,
+        );
+
         // create submit actions
         let create_mforward_submit =
             |dot, cmd| Message::MForwardSubmit { dot, cmd };
@@ -589,7 +595,7 @@ impl<KC: KeyClocks> Newt<KC> {
         let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
             let key_votes = votes.remove(&key).unwrap_or_default();
-            let remaining_keys = cmd
+            let other_keys = cmd
                 .all_keys()
                 .filter_map(|(shard_id, shard_key)| {
                     if key != shard_key {
@@ -600,11 +606,11 @@ impl<KC: KeyClocks> Newt<KC> {
                 })
                 .collect();
             trace!(
-                "p{}: MCommit({:?}) key {:?} | remaining keys {:?} | time={}",
+                "p{}: MCommit({:?}) key {:?} | other keys {:?} | time={}",
                 _id,
                 dot,
                 key,
-                remaining_keys,
+                other_keys,
                 _time.micros()
             );
             TableExecutionInfo::attached_votes(
@@ -612,7 +618,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 clock,
                 key.clone(),
                 rifl,
-                remaining_keys,
+                other_keys,
                 ops.clone(),
                 key_votes,
             )
