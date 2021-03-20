@@ -168,6 +168,11 @@ impl FPaxos {
         match self.multi_synod.submit(cmd) {
             MultiSynodMessage::MSpawnCommander(ballot, slot, cmd) => {
                 // in this case, we're the leader:
+                // - record command size
+                self.bp.collect_metric(
+                    fantoch::protocol::ProtocolMetricsKind::CommandKeyCount,
+                    cmd.total_key_count() as u64,
+                );
                 // - send a spawn commander to self (that can run in a different
                 //   process for parallelism)
                 let mspawn = Message::MSpawnCommander { ballot, slot, cmd };
