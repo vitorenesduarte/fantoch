@@ -163,7 +163,12 @@ impl Executor for TableExecutor {
 impl TableExecutor {
     fn handle_stable_msg(&mut self, key: Key, rifl: Rifl) {
         // get pending commands on this key
-        let pending_per_key = self.pending.entry(key.clone()).or_default();
+        let pending_per_key =
+            if let Some(pending_per_key) = self.pending.get_mut(&key) {
+                pending_per_key
+            } else {
+                self.pending.entry(key.clone()).or_default()
+            };
 
         trace!("p{}: key={} Stable {:?}", self.process_id, key, rifl);
         if let Some(pending) = pending_per_key.pending.get_mut(0) {
@@ -219,7 +224,12 @@ impl TableExecutor {
 
     fn handle_stable_at_all_msg(&mut self, key: Key, rifl: Rifl) {
         // get pending commands on this key
-        let pending_per_key = self.pending.entry(key.clone()).or_default();
+        let pending_per_key =
+            if let Some(pending_per_key) = self.pending.get_mut(&key) {
+                pending_per_key
+            } else {
+                self.pending.entry(key.clone()).or_default()
+            };
 
         trace!("p{}: key={} StableAtAll {:?}", self.process_id, key, rifl);
 
@@ -274,7 +284,12 @@ impl TableExecutor {
     where
         I: Iterator<Item = Pending>,
     {
-        let pending_per_key = self.pending.entry(key.clone()).or_default();
+        let pending_per_key =
+            if let Some(pending_per_key) = self.pending.get_mut(&key) {
+                pending_per_key
+            } else {
+                self.pending.entry(key.clone()).or_default()
+            };
         if !pending_per_key.pending.is_empty() {
             // if there's already commmands pending at this key, then no
             // command can be executed, and thus we add them all as pending
@@ -359,7 +374,7 @@ impl TableExecutor {
             // if I'm not the elected key, then simply notify the elected key
             // that the command is stable at my partition
             let msg = TableExecutionInfo::stable(
-                pending.elected_key.clone(),
+                std::mem::take(&mut pending.elected_key),
                 pending.rifl,
             );
             to_executors.push((pending.elected_key_shard, msg));
