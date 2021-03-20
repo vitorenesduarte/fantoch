@@ -71,7 +71,10 @@ pub trait Executor: Clone {
     }
 
     #[must_use]
-    fn executed(&mut self, _time: &dyn SysTime) -> Option<CommittedAndExecuted> {
+    fn executed(
+        &mut self,
+        _time: &dyn SysTime,
+    ) -> Option<CommittedAndExecuted> {
         // protocols that are interested in notifying the worker
         // `GC_WORKER_INDEX` (see fantoch::run::prelude) with these executed
         // notifications should overwrite this

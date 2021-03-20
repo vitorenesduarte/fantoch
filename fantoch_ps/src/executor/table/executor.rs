@@ -35,7 +35,7 @@ struct PendingPerKey {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Pending {
     rifl: Rifl,
-    remaining_keys: Vec<(ShardId, Key)>,
+    other_keys: Vec<(ShardId, Key)>,
     ops: Arc<Vec<KVOp>>,
     missing_stable_keys: usize,
 }
@@ -43,13 +43,13 @@ pub struct Pending {
 impl Pending {
     pub fn new(
         rifl: Rifl,
-        remaining_keys: Vec<(ShardId, Key)>,
+        other_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
     ) -> Self {
-        let missing_stable_keys = remaining_keys.len();
+        let missing_stable_keys = other_keys.len();
         Self {
             rifl,
-            remaining_keys,
+            other_keys,
             ops,
             missing_stable_keys,
         }
@@ -95,7 +95,7 @@ impl Executor for TableExecutor {
                 clock,
                 key,
                 rifl,
-                remaining_keys,
+                other_keys: remaining_keys,
                 ops,
                 votes,
             } => {
@@ -262,7 +262,7 @@ impl TableExecutor {
             // otherwise, send a `Stable` message to each of the other
             // keys/partitions accessed by the command;
             // take `remaining_keys` as they're no longer needed
-            let remaining_keys = std::mem::take(&mut pending.remaining_keys);
+            let remaining_keys = std::mem::take(&mut pending.other_keys);
             let msgs =
                 remaining_keys.into_iter().map(|(shard_id, shard_key)| {
                     let msg =
@@ -318,7 +318,7 @@ pub enum TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        remaining_keys: Vec<(ShardId, Key)>,
+        other_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     },
@@ -338,7 +338,7 @@ impl TableExecutionInfo {
         clock: u64,
         key: Key,
         rifl: Rifl,
-        remaining_keys: Vec<(ShardId, Key)>,
+        other_keys: Vec<(ShardId, Key)>,
         ops: Arc<Vec<KVOp>>,
         votes: Vec<VoteRange>,
     ) -> Self {
@@ -347,7 +347,7 @@ impl TableExecutionInfo {
             clock,
             key,
             rifl,
-            remaining_keys,
+            other_keys,
             ops,
             votes,
         }

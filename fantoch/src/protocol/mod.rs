@@ -79,7 +79,11 @@ pub trait Protocol: Debug + Clone {
 
     fn handle_event(&mut self, event: Self::PeriodicEvent, time: &dyn SysTime);
 
-    fn handle_executed(&mut self, _committed_and_executed: CommittedAndExecuted, _time: &dyn SysTime) {
+    fn handle_executed(
+        &mut self,
+        _committed_and_executed: CommittedAndExecuted,
+        _time: &dyn SysTime,
+    ) {
         // protocols interested in handling this type of notifications at the
         // worker `GC_WORKER_INDEX` (see fantoch::run::prelude) should overwrite
         // this
@@ -150,6 +154,7 @@ pub enum ProtocolMetricsKind {
     CommitLatency,
     WaitConditionDelay,
     CommittedDepsLen,
+    CommandKeyCount,
 }
 
 impl Debug for ProtocolMetricsKind {
@@ -166,6 +171,9 @@ impl Debug for ProtocolMetricsKind {
             }
             ProtocolMetricsKind::CommittedDepsLen => {
                 write!(f, "committed_deps_len")
+            }
+            ProtocolMetricsKind::CommandKeyCount => {
+                write!(f, "command_key_count")
             }
         }
     }
