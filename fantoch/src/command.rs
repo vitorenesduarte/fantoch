@@ -13,6 +13,9 @@ pub const DEFAULT_SHARD_ID: ShardId = 0;
 pub struct Command {
     rifl: Rifl,
     shard_to_ops: HashMap<ShardId, HashMap<Key, Arc<Vec<KVOp>>>>,
+    // one of the keys accessed by this command
+    elected_key: Key,
+    elected_key_shard: ShardId,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean
     _empty_keys: HashMap<Key, Arc<Vec<KVOp>>>,
@@ -24,20 +27,33 @@ impl Command {
         rifl: Rifl,
         shard_to_ops: HashMap<ShardId, HashMap<Key, Vec<KVOp>>>,
     ) -> Self {
+        let mut elected_key_and_shard = None;
+        let shard_to_ops = shard_to_ops
+            .into_iter()
+            .map(|(shard_id, shard_ops)| {
+                (
+                    shard_id,
+                    shard_ops
+                        .into_iter()
+                        .map(|(key, ops)| {
+                            // set elected key in case it's not set
+                            if elected_key_and_shard.is_none() {
+                                elected_key_and_shard =
+                                    Some((key.clone(), shard_id));
+                            }
+                            (key, Arc::new(ops))
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let (elected_key, elected_key_shard) = elected_key_and_shard
+            .expect("command must access at least one key");
         Self {
             rifl,
-            shard_to_ops: shard_to_ops
-                .into_iter()
-                .map(|(shard_id, shard_ops)| {
-                    (
-                        shard_id,
-                        shard_ops
-                            .into_iter()
-                            .map(|(key, ops)| (key, Arc::new(ops)))
-                            .collect(),
-                    )
-                })
-                .collect(),
+            shard_to_ops,
+            elected_key,
+            elected_key_shard,
             _empty_keys: HashMap::new(),
         }
     }
@@ -99,11 +115,33 @@ impl Command {
             .unwrap_or_else(|| self._empty_keys.keys())
     }
 
+    /// Returns the elected key.
+    pub fn elected_key(&self) -> &Key {
+        &self.elected_key
+    }
+
+    /// Returns the shard of the elected key.
+    pub fn elected_key_shard(&self) -> ShardId {
+        self.elected_key_shard
+    }
+
     /// Returns references to all the keys accessed by this command.
     pub fn all_keys(&self) -> impl Iterator<Item = (&ShardId, &Key)> {
         self.shard_to_ops.iter().flat_map(|(shard_id, shard_ops)| {
             shard_ops.keys().map(move |key| (shard_id, key))
         })
+    }
+
+    pub fn all_keys_but_elected_key(
+        &self,
+    ) -> impl Iterator<Item = (ShardId, Key)> + '_ {
+        self.shard_to_ops
+            .iter()
+            .flat_map(|(shard_id, shard_ops)| {
+                shard_ops.keys().map(move |key| (shard_id, key))
+            })
+            .filter(move |(_, key)| key != &&self.elected_key)
+            .map(|(shard_id, key)| (*shard_id, key.clone()))
     }
 
     /// Returns the number of shards accessed by this command.
