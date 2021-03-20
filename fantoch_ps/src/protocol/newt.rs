@@ -595,29 +595,35 @@ impl<KC: KeyClocks> Newt<KC> {
         let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
             let key_votes = votes.remove(&key).unwrap_or_default();
-            let other_keys = cmd
-                .all_keys()
-                .filter_map(|(shard_id, shard_key)| {
-                    if key != shard_key {
-                        Some((*shard_id, shard_key.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            let key = key.clone();
+            let elected_key = cmd.elected_key().clone();
+            let elected_key_shard = cmd.elected_key_shard();
+            // if this key is the elected key, then compute the a list with all
+            // the other keys; this list will be used by the elected key to
+            // notify the remaining keys once the command is stable at all
+            // keys/partitions
+            let other_keys = if elected_key == key {
+                Some(cmd.all_keys_but_elected_key().collect())
+            } else {
+                None
+            };
             trace!(
-                "p{}: MCommit({:?}) key {:?} | other keys {:?} | time={}",
+                "p{}: MCommit({:?}) key {:?} | elected key {:?} {:?} | other keys {:?} | time={}",
                 _id,
                 dot,
                 key,
+                elected_key,
+                elected_key_shard,
                 other_keys,
                 _time.micros()
             );
             TableExecutionInfo::attached_votes(
                 dot,
                 clock,
-                key.clone(),
+                key,
                 rifl,
+                elected_key,
+                elected_key_shard,
                 other_keys,
                 ops.clone(),
                 key_votes,
