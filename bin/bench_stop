@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-
-for port in 3001 3002 3003; do
-    pid=$(lsof -n -i :${port} | grep LISTEN | awk '{ print $2 }')
-    kill "${pid}"
-done
