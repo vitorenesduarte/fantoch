@@ -415,10 +415,10 @@ pub fn fantoch_setup(
     testbed: Testbed,
 ) -> Box<
     dyn for<'r> Fn(
-        &'r tsunami::Machine<'_>,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
-    > + Send
+            &'r tsunami::Machine<'_>,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
+        > + Send
         + Sync
         + 'static,
 > {
@@ -496,10 +496,10 @@ pub fn fantoch_setup(
 
 pub fn veleta_fantoch_setup() -> Box<
     dyn for<'r> Fn(
-        &'r tsunami::Machine<'_>,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
-    > + Send
+            &'r tsunami::Machine<'_>,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<(), Report>> + Send + 'r>,
+        > + Send
         + Sync
         + 'static,
 > {

@@ -72,13 +72,14 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
+    Protocol::CaesarLocked,
     Protocol::NewtAtomic,
     /*
     Protocol::Basic,
     Protocol::AtlasLocked,
-    Protocol::FPaxos,
     Protocol::EPaxosLocked,
     Protocol::CaesarLocked,
+    Protocol::FPaxos,
     */
 ];
 
@@ -106,7 +107,8 @@ macro_rules! config {
 #[tokio::main]
 async fn main() -> Result<(), Report> {
     // fairness_and_tail_latency_plot().await
-    increasing_load_plot().await
+    // increasing_load_plot().await
+    batching_plot().await
     // partial_replication_plot().await
 }
 
@@ -122,13 +124,12 @@ async fn partial_replication_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        /* (Protocol::NewtLocked, config!(n, 1, false, None, false)),
-         * (Protocol::AtlasLocked, config!(n, 1, false, None, false)), */
+        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
         // 256,
-        // 1024,
+        1024,
         // for Atlas s=2,4 zipf=0.7 r=50%:
         // 1024 * 2,
         // 1024 * 4,
@@ -136,37 +137,40 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // for Atlas s=2 zipf=0.7 r=95%:
         // 1024 * 10,
         // for Atlas s=2 zipf=0.7 r=95%:
-        // 1024 * 12,
+        1024 * 12,
         // 1024 * 16,
         // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95%:
-        // 1024 * 20,
-        // 1024 * 24,
-        // 1024 * 32,
-        // 1024 * 34,
-        // 1024 * 36,
+        1024 * 20,
+        1024 * 24,
+        1024 * 32,
+        1024 * 34,
+        1024 * 36,
         // 1024 * 40,
         // 1024 * 44,
         // 1024 * 48,
         // 1024 * 64,
         // 1024 * 72,
         // 1024 * 80,
+        // 1024 * 88,
         // 1024 * 96,
         // 1024 * 104,
         // 1024 * 112,
         // 1024 * 128,
-        1024 * 144,
+        // 1024 * 144,
     ];
-    let batch_max_size = 1;
+    let batch_max_sizes = vec![1];
 
-    let shard_count = 6;
+    // shard_counts: 2, 4, 6
+    let shard_count = 2;
     let keys_per_command = 2;
     let payload_size = 100;
     let cpus = 12;
 
     let mut workloads = Vec::new();
-    // for coefficient in vec![0.5, 0.7] {
-    for coefficient in vec![1.0] {
+    for coefficient in vec![0.5, 0.7] {
+        // janus*:
         // for read_only_percentage in vec![100, 95, 50] {
+        // newt:
         for read_only_percentage in vec![0] {
             let key_gen = KeyGen::Zipf {
                 total_keys_per_shard: 1_000_000,
@@ -194,7 +198,10 @@ async fn partial_replication_plot() -> Result<(), Report> {
 
     // init logging
     let progress = TracingProgressBar::init(
-        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+        (workloads.len()
+            * clients_per_region.len()
+            * configs.len()
+            * batch_max_sizes.len()) as u64,
     );
 
     // create AWS planet
@@ -207,7 +214,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -234,7 +241,7 @@ async fn batching_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![
@@ -244,16 +251,17 @@ async fn batching_plot() -> Result<(), Report> {
         // 1024 * 8,
         // 1024 * 16,
         // 1024 * 20,
-        // 1024 * 24,
+        1024 * 24,
         // 1024 * 28,
         // 1024 * 44,
         // 1024 * 48,
         // 1024 * 52,
         // 1024 * 56,
         // 1024 * 60,
-        1024 * 64,
+        // 1024 * 64,
     ];
-    let batch_max_sizes = vec![1, 10000];
+    let batch_max_sizes = vec![4];
+    // let batch_max_sizes = vec![10000];
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -286,28 +294,28 @@ async fn batching_plot() -> Result<(), Report> {
 
     // init logging
     let progress = TracingProgressBar::init(
-        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+        (workloads.len()
+            * clients_per_region.len()
+            * configs.len()
+            * batch_max_sizes.len()) as u64,
     );
 
     // create AWS planet
     let planet = Some(Planet::from(LATENCY_AWS));
-
-    for batch_max_size in batch_max_sizes {
-        baremetal_bench(
-            regions.clone(),
-            shard_count,
-            planet.clone(),
-            configs.clone(),
-            clients_per_region.clone(),
-            workloads.clone(),
-            batch_max_size,
-            cpus,
-            skip,
-            progress.clone(),
-            results_dir,
-        )
-        .await?;
-    }
+    baremetal_bench(
+        regions.clone(),
+        shard_count,
+        planet.clone(),
+        configs.clone(),
+        clients_per_region.clone(),
+        workloads.clone(),
+        batch_max_sizes,
+        cpus,
+        skip,
+        progress.clone(),
+        results_dir,
+    )
+    .await?;
     Ok(())
 }
 
@@ -335,7 +343,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
-        (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
+        // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
         (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
 
@@ -349,7 +357,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         1024 * 16,
         1024 * 20,
     ];
-    let batch_max_size = 1;
+    let batch_max_sizes = vec![1];
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -391,7 +399,10 @@ async fn increasing_load_plot() -> Result<(), Report> {
 
     // init logging
     let progress = TracingProgressBar::init(
-        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+        (workloads.len()
+            * clients_per_region.len()
+            * configs.len()
+            * batch_max_sizes.len()) as u64,
     );
 
     // create AWS planet
@@ -404,7 +415,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -438,7 +449,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![256, 512];
-    let batch_max_size = 1;
+    let batch_max_sizes = vec![1];
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -475,7 +486,10 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
 
     // init logging
     let progress = TracingProgressBar::init(
-        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+        (workloads.len()
+            * clients_per_region.len()
+            * configs.len()
+            * batch_max_sizes.len()) as u64,
     );
 
     // create AWS planet
@@ -489,7 +503,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -545,7 +559,7 @@ async fn whatever_plot() -> Result<(), Report> {
         // 1024 * 16,
         // 1024 * 32,
     ];
-    let batch_max_size = 1;
+    let batch_max_sizes = vec![1];
 
     let shard_count = 1;
     let keys_per_command = 1;
@@ -688,7 +702,10 @@ async fn whatever_plot() -> Result<(), Report> {
 
     // init logging
     let progress = TracingProgressBar::init(
-        (workloads.len() * clients_per_region.len() * configs.len()) as u64,
+        (workloads.len()
+            * clients_per_region.len()
+            * configs.len()
+            * batch_max_sizes.len()) as u64,
     );
 
     // create AWS planet
@@ -702,7 +719,7 @@ async fn whatever_plot() -> Result<(), Report> {
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -743,7 +760,7 @@ async fn local_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    batch_max_size: usize,
+    batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -770,7 +787,7 @@ where
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -790,7 +807,7 @@ async fn baremetal_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    batch_max_size: usize,
+    batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -824,7 +841,7 @@ where
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -843,7 +860,7 @@ async fn aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    batch_max_size: usize,
+    batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -857,7 +874,7 @@ async fn aws_bench(
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -885,7 +902,7 @@ async fn do_aws_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    batch_max_size: usize,
+    batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -918,7 +935,7 @@ async fn do_aws_bench(
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         cpus,
         skip,
         progress,
@@ -937,7 +954,7 @@ async fn run_bench(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    batch_max_size: usize,
+    batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
     progress: TracingProgressBar,
@@ -953,7 +970,7 @@ async fn run_bench(
         configs,
         clients_per_region,
         workloads,
-        batch_max_size,
+        batch_max_sizes,
         BATCH_MAX_DELAY,
         cpus,
         skip,

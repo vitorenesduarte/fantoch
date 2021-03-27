@@ -412,7 +412,7 @@ mod tests {
                 if should_conflict {
                     let conflict = is_dep(dot_a, dot_b, &all_deps)
                         || is_dep(dot_b, dot_a, &all_deps);
-                    assert!(conflict, format!("dot {:?} should be a dependency of {:?} (or the other way around); but that was not the case: {:?}", dot_a, dot_b, all_deps));
+                    assert!(conflict, "dot {:?} should be a dependency of {:?} (or the other way around); but that was not the case: {:?}", dot_a, dot_b, all_deps);
                 }
             }
         }

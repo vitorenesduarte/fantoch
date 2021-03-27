@@ -11,7 +11,7 @@ pub use fmt::PlotFmt;
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::KeyGen;
-use fantoch::executor::ExecutorMetricsKind;
+// use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
 use fantoch::protocol::ProtocolMetricsKind;
 use fantoch_exp::Protocol;
@@ -398,7 +398,7 @@ pub fn latency_plot<R>(
     // HACK:
     let legend_column_spacing =
         if search_count == 7 { Some(1.25) } else { None };
-    let x_bbox_to_anchor = Some(0.48);
+    let x_bbox_to_anchor = Some(0.46);
     add_legend(
         plotted,
         Some(legends),
@@ -828,7 +828,9 @@ pub fn inner_throughput_something_plot(
         );
 
         // save max throughput
-        max_throughputs.push((search, max_throughput));
+        if max_throughput > 0 {
+            max_throughputs.push((search, max_throughput));
+        }
 
         // plot it! (if there's something to be plotted)
         if !x.is_empty() {
@@ -1078,10 +1080,10 @@ pub fn inter_machine_scalability_plot(
 }
 
 pub fn batching_plot(
-    searches: Vec<Search>,
+    searches: Vec<(Search, usize)>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     n: usize,
-    settings: Vec<(usize, usize)>,
+    settings: Vec<(bool, usize)>,
     y_range: Option<(f64, f64)>,
     output_dir: Option<&str>,
     output_file: &str,
@@ -1130,15 +1132,20 @@ pub fn batching_plot(
     // keep track of the number of plotted instances
     let mut plotted = 0;
 
-    for (shift, mut search) in searches.clone() {
+    for (shift, (mut search, batch_max_size)) in searches.clone() {
         let mut y = Vec::new();
-        for (batch_max_size, payload_size) in settings.clone() {
+        for (batching, payload_size) in settings.clone() {
             // check `n`
             assert_eq!(search.n, n, "batching_plot: value of n in search doesn't match the provided");
 
-            search
-                .batch_max_size(batch_max_size)
-                .payload_size(payload_size);
+            // set payload size
+            search.payload_size(payload_size);
+            // set batch max size if batching
+            if batching {
+                search.batch_max_size(batch_max_size);
+            } else {
+                search.batch_max_size(1);
+            }
 
             // execute search
             let exp_data = db.find(search)?;
@@ -1173,12 +1180,12 @@ pub fn batching_plot(
     let mut payload_sizes = BTreeSet::new();
     let labels: Vec<_> = settings
         .into_iter()
-        .map(|(max_batch_size, payload_size)| {
+        .map(|(batching, payload_size)| {
             payload_sizes.insert(payload_size);
-            match max_batch_size {
-                1 => "OFF",
-                10000 => "ON",
-                _ => panic!("unsupported max batch size: {}", max_batch_size),
+            if batching {
+                "ON"
+            } else {
+                "OFF"
             }
         })
         .collect();
@@ -1364,7 +1371,7 @@ where
     // - adjust horizontal space between the three plots
     let kwargs = pydict!(
         py,
-        ("top", 0.90),
+        ("top", 0.88),
         ("bottom", 0.30),
         ("left", 0.18),
         ("wspace", 0.1)
@@ -1704,15 +1711,20 @@ pub fn process_metrics_table(
         "slow",
         "(%)",
         "gc",
+        // CAESAR:
         "wait delay (ms)",
-        "exec delay (ms)",
-        // "chains",
+        // "exec delay (ms)",
         "deps size"
+        // ATLAS/EPAXOS/JANUS:
+        // "chains",
         // "out",
         // "in",
+        // NEWT/EPAXOS:
+        // "command key count",
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.24, 0.20, 0.24];
+    let col_widths = vec![0.09, 0.09, 0.07, 0.10, 0.50, 0.23];
+    // let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.68];
 
     // actual data
     let mut cells = Vec::with_capacity(searches.len());
@@ -1748,7 +1760,7 @@ pub fn process_metrics_table(
         let (_, _, exp_data) = exp_data.pop().unwrap();
 
         // select the correct metrics depending on the `MetricsType` chosen
-        let (protocol_metrics, executor_metrics) = match metrics_type {
+        let (protocol_metrics, _executor_metrics) = match metrics_type {
             MetricsType::Process(_) => panic!("unsupported metrics type Process in process_metrics_table"),
             MetricsType::ProcessGlobal => (&exp_data.global_protocol_metrics, &exp_data.global_executor_metrics),
             MetricsType::ClientGlobal => panic!("unsupported metrics type ClientGlobal in process_metrics_table"),
@@ -1784,29 +1796,20 @@ pub fn process_metrics_table(
             .get_collected(ProtocolMetricsKind::WaitConditionDelay)
             .map(|delay| {
                 format!(
-                    "{} ± {} [{}]",
+                    "{} ± {} [{}] t={}",
                     delay.mean().value().round(),
                     delay.stddev().value().round(),
-                    delay.max().value().round()
+                    delay.max().value().round(),
+                    delay.count(),
                 )
             });
-        let execution_delay = executor_metrics
-            .get_collected(ExecutorMetricsKind::ExecutionDelay)
-            .map(|delay| {
-                format!(
-                    "{} ± {}",
-                    delay.mean().value().round(),
-                    delay.stddev().value().round()
-                )
-            });
-        // let chain_size = executor_metrics
-        //     .get_collected(ExecutorMetricsKind::ChainSize)
-        //     .map(|chain_size| {
+        // let execution_delay = executor_metrics
+        //     .get_collected(ExecutorMetricsKind::ExecutionDelay)
+        //     .map(|delay| {
         //         format!(
-        //             "{} ± {} [{}]",
-        //             chain_size.mean().round(),
-        //             chain_size.stddev().round(),
-        //             chain_size.max().value().round()
+        //             "{} ± {}",
+        //             delay.mean().value().round(),
+        //             delay.stddev().value().round()
         //         )
         //     });
         let deps_size = protocol_metrics
@@ -1819,12 +1822,34 @@ pub fn process_metrics_table(
                     deps_size.max().value().round()
                 )
             });
-        // let out_requests = executor_metrics
-        //     .get_aggregated(ExecutorMetricsKind::OutRequests)
-        //     .map(|out_requests| fmt(*out_requests));
-        // let in_requests = executor_metrics
-        //     .get_aggregated(ExecutorMetricsKind::InRequests)
-        //     .map(|in_requests| fmt(*in_requests));
+        /*
+        let chain_size = executor_metrics
+            .get_collected(ExecutorMetricsKind::ChainSize)
+            .map(|chain_size| {
+                format!(
+                    "{} ± {} [{}]",
+                    chain_size.mean().round(),
+                    chain_size.stddev().round(),
+                    chain_size.max().value().round()
+                )
+            });
+        let out_requests = executor_metrics
+            .get_aggregated(ExecutorMetricsKind::OutRequests)
+            .map(|out_requests| fmt(*out_requests));
+        let in_requests = executor_metrics
+            .get_aggregated(ExecutorMetricsKind::InRequests)
+            .map(|in_requests| fmt(*in_requests));
+        let command_key_count = protocol_metrics
+            .get_collected(ProtocolMetricsKind::CommandKeyCount)
+            .map(|command_key_count| {
+                format!(
+                    "{} ± {} [{}]",
+                    command_key_count.mean().value().round(),
+                    command_key_count.stddev().value().round(),
+                    command_key_count.max().value().round()
+                )
+            });
+             */
         // create cell
         let cell = vec![
             fast_path,
@@ -1832,11 +1857,14 @@ pub fn process_metrics_table(
             fp_rate,
             gced,
             wait_condition_delay,
-            execution_delay,
-            // chain_size,
+            // execution_delay,
             deps_size,
-            /* out_requests,
-             * in_requests, */
+            /*
+            chain_size,
+            out_requests,
+            in_requests,
+            command_key_count,
+            */
         ];
         // format cell
         let fmt_cell_data =

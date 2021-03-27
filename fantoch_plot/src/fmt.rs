@@ -23,8 +23,8 @@ impl PlotFmt {
             Protocol::EPaxosLocked => "EPaxos",
             Protocol::CaesarLocked => "Caesar",
             Protocol::FPaxos => "FPaxos",
-            Protocol::NewtAtomic => "Aeon",
-            Protocol::NewtLocked => "Newt-L",
+            Protocol::NewtAtomic => "Tempo",
+            Protocol::NewtLocked => "Tempo-L",
             Protocol::Basic => "Inconsistent",
         }
     }
