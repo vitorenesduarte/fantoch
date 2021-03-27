@@ -324,8 +324,7 @@ fn increasing_load_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn batching_plot() -> Result<(), Report> {
     println!(">>>>>>>> BATCHING <<<<<<<<");
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_batching";
+    let results_dir = "/home/vitor.enes/eurosys_results/results_batching";
 
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
@@ -1323,7 +1322,7 @@ fn multi_key_all() -> Result<(), Report> {
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
     let results_dir =
-    "/home/vitor.enes/eurosys_results/results_increasing_load";
+        "/home/vitor.enes/eurosys_results/results_increasing_load";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![

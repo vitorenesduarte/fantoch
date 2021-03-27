@@ -168,8 +168,10 @@ async fn partial_replication_plot() -> Result<(), Report> {
 
     let mut workloads = Vec::new();
     for coefficient in vec![0.5, 0.7] {
-        // for read_only_percentage in vec![100, 95, 50] { // janus*
-        for read_only_percentage in vec![0] { // newt
+        // janus*:
+        // for read_only_percentage in vec![100, 95, 50] {
+        // newt:
+        for read_only_percentage in vec![0] {
             let key_gen = KeyGen::Zipf {
                 total_keys_per_shard: 1_000_000,
                 coefficient,

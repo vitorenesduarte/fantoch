@@ -95,7 +95,7 @@ impl FantochFeature {
             &tracing::Level::INFO => None,
             &tracing::Level::DEBUG => Some(Self::MaxLevelDebug),
             &tracing::Level::TRACE => Some(Self::MaxLevelTrace),
-            _ => panic!(format!("tracing level {:?} not supported", level)),
+            _ => panic!("tracing level {:?} not supported", level),
         }
     }
 }
