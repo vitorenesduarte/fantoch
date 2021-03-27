@@ -26,28 +26,26 @@ fn main() -> Result<(), Report> {
     // partial_replication_all()?;
     // multi_key()?;
     // single_key_all()?;
-    show_distance_matrix();
+    // show_distance_matrix();
     eurosys()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    // fairness_plot()?;
-    // tail_latency_plot()?;
+    fairness_plot()?;
+    tail_latency_plot()?;
     increasing_load_plot()?;
-    // batching_plot()?;
-    // scalability_plot()?;
-    // partial_replication_plot()?;
+    batching_plot()?;
+    partial_replication_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAIRNESS <<<<<<<<");
-    // let results_dir =
-    //     "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
-    let results_dir = "../results_fairness_and_tail_latency";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -128,7 +126,8 @@ fn fairness_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
     println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
-    let results_dir = "../results_fairness_and_tail_latency";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -292,7 +291,7 @@ fn increasing_load_plot() -> Result<(), Report> {
     let x_range = None;
     let y_range = Some((100.0, 1500.0));
     let y_log_scale = true;
-    let x_bbox_to_anchor = Some(0.48);
+    let x_bbox_to_anchor = Some(0.46);
     let legend_column_spacing = Some(1.25);
     let left_margin = None;
     let width_reduction = None;
@@ -325,7 +324,8 @@ fn increasing_load_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn batching_plot() -> Result<(), Report> {
     println!(">>>>>>>> BATCHING <<<<<<<<");
-    let results_dir = "../results_increasing_load";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_batching";
 
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
@@ -338,17 +338,21 @@ fn batching_plot() -> Result<(), Report> {
     };
 
     let n = 5;
-    let protocols = vec![(Protocol::NewtAtomic, 1), (Protocol::FPaxos, 1)];
+    let newt = (Protocol::NewtAtomic, 1);
+    let fpaxos = (Protocol::FPaxos, 1);
+    let protocols = vec![newt, fpaxos];
+    let newt_batch_max_size = 4;
+    let fpaxos_batch_max_size = 10000;
     let search_gen = |(protocol, f)| Search::new(n, f, protocol);
 
     let settings = vec![
-        // (batch_max_size, payload_size)
-        (1, 256),
-        (10000, 256),
-        (1, 1024),
-        (10000, 1024),
-        (1, 4096),
-        (10000, 4096),
+        // (batching, payload_size)
+        (false, 256),
+        (true, 256),
+        (false, 1024),
+        (true, 1024),
+        (false, 4096),
+        (true, 4096),
     ];
     let n = 5;
     let leader = 1;
@@ -364,6 +368,7 @@ fn batching_plot() -> Result<(), Report> {
         1024 * 16,
         1024 * 20,
         1024 * 24,
+        1024 * 28,
         1024 * 32,
         1024 * 36,
         1024 * 40,
@@ -378,20 +383,26 @@ fn batching_plot() -> Result<(), Report> {
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    for (batch_max_size, payload_size) in settings.clone() {
+    for (batching, payload_size) in settings.clone() {
         let search_refine = |search: &mut Search, key_gen: KeyGen| {
             // filter by key gen payload size and batch max size in all
             // protocols
-            search
-                .key_gen(key_gen)
-                .payload_size(payload_size)
-                .batch_max_size(batch_max_size);
+            search.key_gen(key_gen).payload_size(payload_size);
+            // set batch max size if batching
+            let batch_max_size = if batching {
+                match search.protocol {
+                    Protocol::NewtAtomic => newt_batch_max_size,
+                    Protocol::FPaxos => fpaxos_batch_max_size,
+                    _ => panic!("unsupported protocol: {:?}", search.protocol),
+                }
+            } else {
+                1
+            };
+            search.batch_max_size(batch_max_size);
         };
 
-        let path = format!(
-            "plot_batching_heatmap_{}_{}.pdf",
-            batch_max_size, payload_size
-        );
+        let path =
+            format!("plot_batching_heatmap_{}_{}.pdf", batching, payload_size);
         fantoch_plot::heatmap_plot_split(
             n,
             protocols.clone(),
@@ -413,8 +424,7 @@ fn batching_plot() -> Result<(), Report> {
         let legend_column_spacing = None;
         let left_margin = None;
         let width_reduction = None;
-        let path =
-            format!("plot_batching_{}_{}.pdf", batch_max_size, payload_size);
+        let path = format!("plot_batching_{}_{}.pdf", batching, payload_size);
         let (max_throughputs, _) = fantoch_plot::throughput_latency_plot_split(
             n,
             protocols.clone(),
@@ -454,10 +464,13 @@ fn batching_plot() -> Result<(), Report> {
     }
 
     // create searches
-    let searches: Vec<_> = protocols
-        .into_iter()
-        .map(|search_gen_input| search_gen(search_gen_input))
-        .collect();
+    let searches: Vec<_> =
+        vec![(newt, newt_batch_max_size), (fpaxos, fpaxos_batch_max_size)]
+            .into_iter()
+            .map(|(search_gen_input, batch_max_size)| {
+                (search_gen(search_gen_input), batch_max_size)
+            })
+            .collect();
     let style_fun = None;
     let path = format!("plot_batching.pdf");
     let y_range = Some((0.0, 800.0));
@@ -548,6 +561,7 @@ fn partial_replication_plot() -> Result<(), Report> {
         1024 * 64,
         1024 * 72,
         1024 * 80,
+        1024 * 88,
         1024 * 96,
         1024 * 104,
         1024 * 112,
@@ -621,7 +635,7 @@ fn partial_replication_plot() -> Result<(), Report> {
         };
 
         let latency_precision = LatencyPrecision::Millis;
-        let y_range = Some((140.0, 310.0));
+        let y_range = Some((140.0, 610.0));
         let y_log_scale = false;
         let x_bbox_to_anchor = Some(0.45);
         let legend_column_spacing = None;
@@ -681,15 +695,14 @@ fn partial_replication_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn partial_replication_all() -> Result<(), Report> {
-    let results_dir = "../results_partial_replication";
+    let results_dir =
+        "/home/vitor.enes/eurosys_results/results_partial_replication";
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
-    // for coefficient in vec![0.5, 1.0] {
     for (coefficient, x_range, y_range) in vec![
         (0.5, Some((0.0, 700.0)), Some((150.0, 400.0))),
         (0.7, Some((0.0, 700.0)), Some((150.0, 400.0))),
-        (1.0, None, None),
     ] {
         let key_gen = KeyGen::Zipf {
             coefficient,
@@ -698,17 +711,13 @@ fn partial_replication_all() -> Result<(), Report> {
         key_gens.push((key_gen, x_range, y_range));
     }
     let payload_size = 100;
-    let protocols = vec![
-        Protocol::AtlasLocked,
-        Protocol::NewtLocked,
-        Protocol::NewtAtomic,
-    ];
+    let protocols = vec![Protocol::AtlasLocked, Protocol::NewtAtomic];
     let latency_precision = LatencyPrecision::Millis;
 
     let shard_combinations = vec![
         // shard_count, shards_per_command
-        (1, 1),
-        (1, 2),
+        // (1, 1),
+        // (1, 2),
         (2, 2),
         (4, 2),
         (6, 2),
@@ -742,6 +751,7 @@ fn partial_replication_all() -> Result<(), Report> {
         1024 * 64,
         1024 * 72,
         1024 * 80,
+        1024 * 88,
         1024 * 96,
         1024 * 104,
         1024 * 112,
@@ -766,7 +776,6 @@ fn partial_replication_all() -> Result<(), Report> {
         }
     };
 
-    // for read_only_percentage in vec![100, 95, 50] {
     for read_only_percentage in vec![0, 100, 95, 50] {
         for (key_gen, x_range, y_range) in key_gens.clone() {
             // generate all-combo throughput-something plot
@@ -1314,7 +1323,7 @@ fn multi_key_all() -> Result<(), Report> {
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
     let results_dir =
-        "/home/vitor.enes/eurosys_results/results_increasing_load";
+    "/home/vitor.enes/eurosys_results/results_increasing_load";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
@@ -1326,9 +1335,13 @@ fn single_key_all() -> Result<(), Report> {
             conflict_rate: 10,
             pool_size: 1,
         },
+        /*
+         */
     ];
-    let payload_size = 4096;
-    let batch_max_size = 1;
+    // let batch_max_sizes = vec![10000, 32, 16, 8, 4, 1];
+    let batch_max_sizes = vec![1];
+    // let payload_sizes = vec![256, 1024, 4096];
+    let payload_sizes = vec![4096];
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::AtlasLocked,
@@ -1345,19 +1358,22 @@ fn single_key_all() -> Result<(), Report> {
         64,
         128,
         256,
-        256,
         512,
         1024,
         1024 * 2,
         1024 * 4,
+        1024 * 6,
         1024 * 8,
         1024 * 12,
         1024 * 16,
         1024 * 20,
         1024 * 24,
+        1024 * 28,
         1024 * 32,
         1024 * 40,
+        1024 * 44,
         1024 * 48,
+        1024 * 52,
         1024 * 56,
         1024 * 60,
         1024 * 64,
@@ -1368,110 +1384,16 @@ fn single_key_all() -> Result<(), Report> {
 
     for n in vec![5] {
         for key_gen in key_gens.clone() {
-            let search_refine = |search: &mut Search, key_gen: KeyGen| {
-                match search.protocol {
-                    Protocol::FPaxos => {
-                        // if fpaxos, don't filter by key gen as
-                        // contention does not affect the results
-                    }
-                    Protocol::AtlasLocked
-                    | Protocol::NewtAtomic
-                    | Protocol::EPaxosLocked
-                    | Protocol::CaesarLocked => {
-                        search.key_gen(key_gen);
-                    }
-                    _ => {
-                        panic!("unsupported protocol: {:?}", search.protocol);
-                    }
-                }
-                // filter by payload size in all protocols
-                search
-                    .payload_size(payload_size)
-                    .batch_max_size(batch_max_size);
-            };
-
-            // create searches
-            let searches: Vec<_> = protocol_combinations(n, protocols.clone())
-                .into_iter()
-                .map(|(protocol, f)| {
-                    let mut search = Search::new(n, f, protocol);
-                    search_refine(&mut search, key_gen);
-                    search
-                })
-                .collect();
-
-            // generate all-combo throughput-something plot
-            for y_axis in vec![
-                ThroughputYAxis::Latency(LatencyMetric::Average),
-                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
-                ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
-                ThroughputYAxis::CPU,
-            ] {
-                let path = format!(
-                    "throughput_{}_n{}_{}.pdf",
-                    y_axis.name(),
-                    n,
-                    key_gen
-                );
-
-                let style_fun = None;
-                let x_range = None;
-                let y_range = None;
-                fantoch_plot::throughput_something_plot(
-                    searches.clone(),
-                    style_fun,
-                    latency_precision,
-                    n,
-                    clients_per_region.clone(),
-                    x_range,
-                    y_range,
-                    y_axis,
-                    PLOT_DIR,
-                    &path,
-                    &db,
-                )?;
-            }
-
-            for heatmap_metric in vec![
-                HeatmapMetric::CPU,
-                HeatmapMetric::NetSend,
-                HeatmapMetric::NetRecv,
-            ] {
-                let path = format!(
-                    "heatmap_{}_n{}_{}.pdf",
-                    heatmap_metric.name(),
-                    n,
-                    key_gen
-                );
-
-                fantoch_plot::heatmap_plot(
-                    n,
-                    protocol_combinations(n, protocols.clone()),
-                    clients_per_region.clone(),
-                    key_gen,
-                    search_refine,
-                    leader,
-                    heatmap_metric,
-                    PLOT_DIR,
-                    &path,
-                    &db,
-                )?;
-            }
-
-            // generate dstat, latency and cdf plots
-            for clients_per_region in clients_per_region.clone() {
-                println!(
-                    "n = {} | {} | c = {}",
-                    n, key_gen, clients_per_region
-                );
-
-                // create searches
-                let searches: Vec<_> =
-                    protocol_combinations(n, protocols.clone())
-                        .into_iter()
-                        .map(|(protocol, f)| {
-                            let mut search = Search::new(n, f, protocol);
-                            match protocol {
+            for batch_max_size in batch_max_sizes.clone() {
+                for payload_size in payload_sizes.clone() {
+                    println!("--------------------------------------------");
+                    println!(
+                        "n = {} | {} | b = {} | p = {}",
+                        n, key_gen, batch_max_size, payload_size,
+                    );
+                    let search_refine =
+                        |search: &mut Search, key_gen: KeyGen| {
+                            match search.protocol {
                                 Protocol::FPaxos => {
                                     // if fpaxos, don't filter by key gen as
                                     // contention does not affect the results
@@ -1485,157 +1407,299 @@ fn single_key_all() -> Result<(), Report> {
                                 _ => {
                                     panic!(
                                         "unsupported protocol: {:?}",
-                                        protocol
+                                        search.protocol
                                     );
                                 }
                             }
-                            // filter by clients per region and payload size in
-                            // all protocols
+                            // filter by payload size in all protocols
                             search
-                                .clients_per_region(clients_per_region)
                                 .payload_size(payload_size)
                                 .batch_max_size(batch_max_size);
-                            search
-                        })
-                        .collect();
+                        };
 
-                // generate dstat table
-                for metrics_type in dstat_combinations(shard_count, n) {
-                    let path = format!(
-                        "dstat_{}_n{}_{}_c{}.pdf",
-                        metrics_type.name(),
-                        n,
-                        key_gen,
-                        clients_per_region,
-                    );
-                    fantoch_plot::dstat_table(
-                        searches.clone(),
-                        metrics_type,
-                        PLOT_DIR,
-                        &path,
-                        &db,
-                    )?;
-                }
+                    // create searches
+                    let searches: Vec<_> =
+                        protocol_combinations(n, protocols.clone())
+                            .into_iter()
+                            .map(|(protocol, f)| {
+                                let mut search = Search::new(n, f, protocol);
+                                search_refine(&mut search, key_gen);
+                                search
+                            })
+                            .collect();
 
-                // generate process metrics table
-                for metrics_type in process_metrics_combinations(shard_count, n)
-                {
-                    let path = format!(
-                        "metrics_{}_n{}_{}_c{}.pdf",
-                        metrics_type.name(),
-                        n,
-                        key_gen,
-                        clients_per_region,
-                    );
-                    fantoch_plot::process_metrics_table(
-                        searches.clone(),
-                        metrics_type,
-                        PLOT_DIR,
-                        &path,
-                        &db,
-                    )?;
-                }
+                    // generate all-combo throughput-something plot
+                    for y_axis in vec![
+                        ThroughputYAxis::Latency(LatencyMetric::Average),
+                        ThroughputYAxis::Latency(LatencyMetric::Percentile(
+                            0.99,
+                        )),
+                        ThroughputYAxis::Latency(LatencyMetric::Percentile(
+                            0.999,
+                        )),
+                        ThroughputYAxis::CPU,
+                    ] {
+                        let path = format!(
+                            "throughput_{}_n{}_{}_b{}_p{}.pdf",
+                            y_axis.name(),
+                            n,
+                            key_gen,
+                            batch_max_size,
+                            payload_size,
+                        );
 
-                // generate latency plot
-                /*
-                let mut shown = false;
-                for error_bar in vec![
-                    ErrorBar::Without,
-                    ErrorBar::With(0.99),
-                    ErrorBar::With(0.999),
-                ] {
-                    let path = format!(
-                        "latency{}_n{}_{}_c{}.pdf",
-                        error_bar.name(),
-                        n,
-                        key_gen,
-                        clients_per_region,
-                    );
-                    let legend_order = None;
-                    let style_fun = None;
-                    let results = fantoch_plot::latency_plot(
-                        searches.clone(),
-                        legend_order,
-                        style_fun,
-                        latency_precision,
-                        n,
-                        error_bar,
-                        PLOT_DIR,
-                        &path,
-                        &db,
-                        fmt_exp_data,
-                    )?;
-
-                    if !shown {
-                        // only show results once
-                        for (search, histogram_fmt) in results {
-                            println!(
-                                "{:<7} f = {} | {}",
-                                PlotFmt::protocol_name(search.protocol),
-                                search.f,
-                                histogram_fmt,
-                            );
-                        }
-                        shown = true;
+                        let style_fun = None;
+                        let x_range = None;
+                        let y_range = None;
+                        fantoch_plot::throughput_something_plot(
+                            searches.clone(),
+                            style_fun,
+                            latency_precision,
+                            n,
+                            clients_per_region.clone(),
+                            x_range,
+                            y_range,
+                            y_axis,
+                            PLOT_DIR,
+                            &path,
+                            &db,
+                        )?;
                     }
-                }
-                */
 
-                // create searches without fpaxos for cdf plots
-                let protocols = vec![
-                    Protocol::NewtAtomic,
-                    Protocol::AtlasLocked,
-                    Protocol::EPaxosLocked,
-                ];
-                let searches: Vec<_> =
-                    protocol_combinations(n, protocols.clone())
-                        .into_iter()
-                        .map(|(protocol, f)| {
-                            let mut search = Search::new(n, f, protocol);
-                            search
-                                .key_gen(key_gen)
-                                .clients_per_region(clients_per_region)
-                                .payload_size(payload_size)
-                                .batch_max_size(batch_max_size);
-                            search
-                        })
-                        .collect();
+                    for heatmap_metric in vec![
+                        HeatmapMetric::CPU,
+                        HeatmapMetric::NetSend,
+                        HeatmapMetric::NetRecv,
+                    ] {
+                        let path = format!(
+                            "heatmap_{}_n{}_{}_b{}_p{}.pdf",
+                            heatmap_metric.name(),
+                            n,
+                            key_gen,
+                            batch_max_size,
+                            payload_size,
+                        );
 
-                // generate cdf plot
-                let path = format!(
-                    "cdf_n{}_{}_c{}.pdf",
-                    n, key_gen, clients_per_region
-                );
-                let style_fun = None;
-                fantoch_plot::cdf_plot(
-                    searches.clone(),
-                    style_fun,
-                    latency_precision,
-                    PLOT_DIR,
-                    &path,
-                    &db,
-                )?;
+                        fantoch_plot::heatmap_plot(
+                            n,
+                            protocol_combinations(n, protocols.clone()),
+                            clients_per_region.clone(),
+                            key_gen,
+                            search_refine,
+                            leader,
+                            heatmap_metric,
+                            PLOT_DIR,
+                            &path,
+                            &db,
+                        )?;
+                    }
 
-                if n > 3 {
-                    // generate cdf plot with subplots
-                    let path = format!(
-                        "cdf_one_per_f_n{}_{}_c{}.pdf",
-                        n, key_gen, clients_per_region
-                    );
-                    let (top_searches, bottom_searches): (Vec<_>, Vec<_>) =
-                        searches.into_iter().partition(|search| search.f == 1);
-                    let x_range = None;
-                    let style_fun = None;
-                    fantoch_plot::cdf_plot_split(
-                        top_searches,
-                        bottom_searches,
-                        x_range,
-                        style_fun,
-                        latency_precision,
-                        PLOT_DIR,
-                        &path,
-                        &db,
-                    )?;
+                    // generate dstat, latency and cdf plots
+                    for clients_per_region in clients_per_region.clone() {
+                        println!(
+                            "n = {} | {} | b = {} | p = {} | c = {}",
+                            n,
+                            key_gen,
+                            batch_max_size,
+                            payload_size,
+                            clients_per_region
+                        );
+
+                        // create searches
+                        let searches: Vec<_> =
+                            protocol_combinations(n, protocols.clone())
+                                .into_iter()
+                                .map(|(protocol, f)| {
+                                    let mut search =
+                                        Search::new(n, f, protocol);
+                                    match protocol {
+                                        Protocol::FPaxos => {
+                                            // if fpaxos, don't filter by key
+                                            // gen as
+                                            // contention does not affect the
+                                            // results
+                                        }
+                                        Protocol::AtlasLocked
+                                        | Protocol::NewtAtomic
+                                        | Protocol::EPaxosLocked
+                                        | Protocol::CaesarLocked => {
+                                            search.key_gen(key_gen);
+                                        }
+                                        _ => {
+                                            panic!(
+                                                "unsupported protocol: {:?}",
+                                                protocol
+                                            );
+                                        }
+                                    }
+                                    // filter by clients per region and payload
+                                    // size in
+                                    // all protocols
+                                    search
+                                        .clients_per_region(clients_per_region)
+                                        .payload_size(payload_size)
+                                        .batch_max_size(batch_max_size);
+                                    search
+                                })
+                                .collect();
+
+                        // generate dstat table
+                        for metrics_type in dstat_combinations(shard_count, n) {
+                            let path = format!(
+                                "dstat_{}_n{}_{}_b{}_p{}_c{}.pdf",
+                                metrics_type.name(),
+                                n,
+                                key_gen,
+                                batch_max_size,
+                                payload_size,
+                                clients_per_region,
+                            );
+                            fantoch_plot::dstat_table(
+                                searches.clone(),
+                                metrics_type,
+                                PLOT_DIR,
+                                &path,
+                                &db,
+                            )?;
+                        }
+
+                        // generate process metrics table
+                        for metrics_type in
+                            process_metrics_combinations(shard_count, n)
+                        {
+                            let path = format!(
+                                "metrics_{}_n{}_{}_b{}_p{}_c{}.pdf",
+                                metrics_type.name(),
+                                n,
+                                key_gen,
+                                batch_max_size,
+                                payload_size,
+                                clients_per_region,
+                            );
+                            fantoch_plot::process_metrics_table(
+                                searches.clone(),
+                                metrics_type,
+                                PLOT_DIR,
+                                &path,
+                                &db,
+                            )?;
+                        }
+
+                        // generate latency plot
+                        /*
+                        let mut shown = false;
+                        for error_bar in vec![
+                            ErrorBar::Without,
+                            ErrorBar::With(0.99),
+                            ErrorBar::With(0.999),
+                        ] {
+                            let path = format!(
+                                "latency{}_n{}_{}_c{}.pdf",
+                                error_bar.name(),
+                                n,
+                                key_gen,
+                                clients_per_region,
+                            );
+                            let legend_order = None;
+                            let style_fun = None;
+                            let results = fantoch_plot::latency_plot(
+                                searches.clone(),
+                                legend_order,
+                                style_fun,
+                                latency_precision,
+                                n,
+                                error_bar,
+                                PLOT_DIR,
+                                &path,
+                                &db,
+                                fmt_exp_data,
+                            )?;
+
+                            if !shown {
+                                // only show results once
+                                for (search, histogram_fmt) in results {
+                                    println!(
+                                        "{:<7} f = {} | {}",
+                                        PlotFmt::protocol_name(search.protocol),
+                                        search.f,
+                                        histogram_fmt,
+                                    );
+                                }
+                                shown = true;
+                            }
+                        }
+                        */
+
+                        // create searches without fpaxos for cdf plots
+                        let protocols = vec![
+                            Protocol::NewtAtomic,
+                            Protocol::AtlasLocked,
+                            Protocol::EPaxosLocked,
+                        ];
+                        let searches: Vec<_> =
+                            protocol_combinations(n, protocols.clone())
+                                .into_iter()
+                                .map(|(protocol, f)| {
+                                    let mut search =
+                                        Search::new(n, f, protocol);
+                                    search
+                                        .key_gen(key_gen)
+                                        .clients_per_region(clients_per_region)
+                                        .payload_size(payload_size)
+                                        .batch_max_size(batch_max_size);
+                                    search
+                                })
+                                .collect();
+
+                        // generate cdf plot
+                        let path = format!(
+                            "cdf_n{}_{}_b{}_p{}_c{}.pdf",
+                            n,
+                            key_gen,
+                            batch_max_size,
+                            payload_size,
+                            clients_per_region
+                        );
+                        let style_fun = None;
+                        fantoch_plot::cdf_plot(
+                            searches.clone(),
+                            style_fun,
+                            latency_precision,
+                            PLOT_DIR,
+                            &path,
+                            &db,
+                        )?;
+
+                        if n > 3 {
+                            // generate cdf plot with subplots
+                            let path = format!(
+                                "cdf_one_per_f_n{}_{}_b{}_p{}_c{}.pdf",
+                                n,
+                                key_gen,
+                                batch_max_size,
+                                payload_size,
+                                clients_per_region
+                            );
+                            let (top_searches, bottom_searches): (
+                                Vec<_>,
+                                Vec<_>,
+                            ) = searches
+                                .into_iter()
+                                .partition(|search| search.f == 1);
+                            let x_range = None;
+                            let style_fun = None;
+                            fantoch_plot::cdf_plot_split(
+                                top_searches,
+                                bottom_searches,
+                                x_range,
+                                style_fun,
+                                latency_precision,
+                                PLOT_DIR,
+                                &path,
+                                &db,
+                            )?;
+                        }
+                    }
                 }
             }
         }

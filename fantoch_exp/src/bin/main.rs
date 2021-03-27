@@ -335,12 +335,12 @@ async fn increasing_load_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::Basic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        // (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 1, false, None, false)),
-        // (Protocol::FPaxos, config!(n, 2, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        // (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::FPaxos, config!(n, 1, false, None, false)),
+        (Protocol::FPaxos, config!(n, 2, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
+        (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
         (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
     ];
