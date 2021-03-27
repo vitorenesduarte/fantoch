@@ -5,11 +5,11 @@
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
 #### Protocols implemented
-- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
-- [FPaxos](https://fpaxos.github.io/), and thus Paxos as a special case: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)
-- [Caesar](https://arxiv.org/abs/1704.03319): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/caesar.rs)
+- Tempo: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
 - [Atlas](https://vitorenes.org/publication/enes-atlas/): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
-- Newt: [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
+- [EPaxos](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
+- [FPaxos](https://fpaxos.github.io/): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)
+- [Caesar](https://arxiv.org/abs/1704.03319): [(source)](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/caesar.rs)
 
 #### What does it do?
 
