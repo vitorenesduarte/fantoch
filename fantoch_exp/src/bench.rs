@@ -50,7 +50,7 @@ pub async fn bench_experiment(
     configs: Vec<(Protocol, Config)>,
     clients_per_region: Vec<usize>,
     workloads: Vec<Workload>,
-    batch_max_size: usize,
+    batch_max_sizes: Vec<usize>,
     batch_max_delay: Duration,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
@@ -71,108 +71,112 @@ pub async fn bench_experiment(
         }
     }
 
-    for &(protocol, config) in &configs {
-        for workload in &workloads {
-            for &clients in &clients_per_region {
-                // check that we have the correct number of server machines
-                assert_eq!(
-                    machines.server_count(),
-                    config.n() * config.shard_count(),
-                    "not enough server machines"
-                );
-
-                // check that we have the correct number of client machines
-                assert_eq!(
-                    machines.client_count(),
-                    config.n(),
-                    "not enough client machines"
-                );
-
-                // maybe skip configuration
-                if skip(protocol, config, clients) {
-                    progress.inc();
-                    continue;
-                }
-
-                if protocol == Protocol::NewtAtomic
-                    && workload.read_only_percentage() > 0
-                {
-                    panic!("NewtAtomic doesn't support read-only commands")
-                }
-
-                if let KeyGen::ConflictPool { .. } = workload.key_gen() {
-                    if workload.shard_count() > 1 {
-                        // the conflict rate key gen is weird in partial
-                        // replication; for example, consider the case where
-                        // commands access two shards (so,
-                        // `shards_per_command = 2`) and the conflict rate
-                        // is 0; further, assume that client A issued
-                        // command first a command X on shards 0 and 1 and
-                        // then a command Y on shards 1 and 2; even though
-                        // the conflict rate is 0, since we use the client
-                        // identifier to make the command doesn't conflict
-                        // with commands from another clients, commands from
-                        // the same client conflict with itself; thus,
-                        // command Y will depend on command X; this means
-                        // that shard 2 needs to learn about command X in
-                        // order to be able to execute command Y. overall,
-                        // we have a non-conflicting workload that's
-                        // non-genuine, and that doesn't seem right. for
-                        // this reason, we simply don't allow it
-                        // panic!("invalid workload; conflict rate key gen
-                        // is inappropriate for partial replication
-                        // scenarios");
-                        panic!("conflict rate key generator is not suitable for partial replication");
-                    }
-                }
-
-                loop {
-                    let exp_dir = create_exp_dir(&results_dir)
-                        .await
-                        .wrap_err("create_exp_dir")?;
-                    tracing::info!(
-                        "experiment metrics will be saved in {}",
-                        exp_dir
+    for batch_max_size in &batch_max_sizes {
+        for &(protocol, config) in &configs {
+            for workload in &workloads {
+                for &clients in &clients_per_region {
+                    // check that we have the correct number of server machines
+                    assert_eq!(
+                        machines.server_count(),
+                        config.n() * config.shard_count(),
+                        "not enough server machines"
                     );
-                    let run = run_experiment(
-                        &machines,
-                        run_mode,
-                        max_log_level,
-                        &features,
-                        testbed,
-                        &planet,
-                        protocol,
-                        config,
-                        clients,
-                        *workload,
-                        batch_max_size,
-                        batch_max_delay,
-                        cpus,
-                        experiment_timeouts,
-                        &exp_dir,
+
+                    // check that we have the correct number of client machines
+                    assert_eq!(
+                        machines.client_count(),
+                        config.n(),
+                        "not enough client machines"
                     );
-                    if let Err(e) = run.await {
-                        // check if it's a timeout error
-                        match e.downcast_ref::<TimeoutError>() {
-                            Some(TimeoutError(source)) => {
-                                // if it's a timeout error, cleanup and restart
-                                // the experiment
-                                tracing::warn!("timeout in {:?}; will cleanup and try again", source);
-                                tokio::fs::remove_dir_all(exp_dir)
-                                    .await
-                                    .wrap_err("remove exp dir")?;
-                                cleanup(&machines, vec![protocol]).await?;
-                            }
-                            None => {
-                                // if not, quit
-                                return Err(e);
-                            }
-                        }
-                    } else {
-                        // if there's no error, then exit the loop and run the
-                        // next experiment (if any)
+
+                    // maybe skip configuration
+                    if skip(protocol, config, clients) {
                         progress.inc();
-                        break;
+                        continue;
+                    }
+
+                    if protocol == Protocol::NewtAtomic
+                        && workload.read_only_percentage() > 0
+                    {
+                        panic!("NewtAtomic doesn't support read-only commands")
+                    }
+
+                    if let KeyGen::ConflictPool { .. } = workload.key_gen() {
+                        if workload.shard_count() > 1 {
+                            // the conflict rate key gen is weird in partial
+                            // replication; for example, consider the case where
+                            // commands access two shards (so,
+                            // `shards_per_command = 2`) and the conflict rate
+                            // is 0; further, assume that client A issued
+                            // command first a command X on shards 0 and 1 and
+                            // then a command Y on shards 1 and 2; even though
+                            // the conflict rate is 0, since we use the client
+                            // identifier to make the command doesn't conflict
+                            // with commands from another clients, commands from
+                            // the same client conflict with itself; thus,
+                            // command Y will depend on command X; this means
+                            // that shard 2 needs to learn about command X in
+                            // order to be able to execute command Y. overall,
+                            // we have a non-conflicting workload that's
+                            // non-genuine, and that doesn't seem right. for
+                            // this reason, we simply don't allow it
+                            // panic!("invalid workload; conflict rate key gen
+                            // is inappropriate for partial replication
+                            // scenarios");
+                            panic!("conflict rate key generator is not suitable for partial replication");
+                        }
+                    }
+
+                    loop {
+                        let exp_dir = create_exp_dir(&results_dir)
+                            .await
+                            .wrap_err("create_exp_dir")?;
+                        tracing::info!(
+                            "experiment metrics will be saved in {}",
+                            exp_dir
+                        );
+                        let run = run_experiment(
+                            &machines,
+                            run_mode,
+                            max_log_level,
+                            &features,
+                            testbed,
+                            &planet,
+                            protocol,
+                            config,
+                            clients,
+                            *workload,
+                            *batch_max_size,
+                            batch_max_delay,
+                            cpus,
+                            experiment_timeouts,
+                            &exp_dir,
+                        );
+                        if let Err(e) = run.await {
+                            // check if it's a timeout error
+                            match e.downcast_ref::<TimeoutError>() {
+                                Some(TimeoutError(source)) => {
+                                    // if it's a timeout error, cleanup and
+                                    // restart
+                                    // the experiment
+                                    tracing::warn!("timeout in {:?}; will cleanup and try again", source);
+                                    tokio::fs::remove_dir_all(exp_dir)
+                                        .await
+                                        .wrap_err("remove exp dir")?;
+                                    cleanup(&machines, vec![protocol]).await?;
+                                }
+                                None => {
+                                    // if not, quit
+                                    return Err(e);
+                                }
+                            }
+                        } else {
+                            // if there's no error, then exit the loop and run
+                            // the next experiment
+                            // (if any)
+                            progress.inc();
+                            break;
+                        }
                     }
                 }
             }

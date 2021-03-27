@@ -21,15 +21,15 @@ const IP: &str = "0.0.0.0";
 // parallelism config
 const WORKERS: usize = 16;
 const EXECUTORS: usize = 16;
-const MULTIPLEXING: usize = 32;
+const MULTIPLEXING: usize = 16;
 
 // process tcp config
 const PROCESS_TCP_NODELAY: bool = true;
 // by default, each socket stream is buffered (with a buffer of size 8KBs),
 // which should greatly reduce the number of syscalls for small-sized messages
-const PROCESS_TCP_BUFFER_SIZE: usize = 5 * 1024 * 1024; // 5MB
+const PROCESS_TCP_BUFFER_SIZE: usize = 16 * 1024 * 1024; // 16MB
 const PROCESS_TCP_FLUSH_INTERVAL: Option<Duration> =
-    Some(Duration::from_millis(2));
+    Some(Duration::from_millis(5));
 
 // if this value is 100, the run doesn't finish, which probably means there's a
 // deadlock somewhere with 1000 we can see that channels fill up sometimes with
