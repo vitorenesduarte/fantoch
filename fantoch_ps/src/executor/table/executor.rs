@@ -337,6 +337,11 @@ impl TableExecutor {
                     assert!(send_stable_msg());
                     // and update the number of shards the key is stable at
                     pending.missing_stable_shards -= 1;
+
+                    // cleanup
+                    rifl_to_stable_count
+                        .remove(&rifl)
+                        .expect("rifl must exist as a key");
                 }
             }
 
