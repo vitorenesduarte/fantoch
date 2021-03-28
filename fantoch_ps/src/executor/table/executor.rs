@@ -12,8 +12,9 @@ use fantoch::time::SysTime;
 use fantoch::trace;
 use fantoch::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use std::{collections::VecDeque, sync::atomic::AtomicU64};
 
 #[derive(Clone)]
 pub struct TableExecutor {
@@ -292,16 +293,8 @@ impl TableExecutor {
             Self::do_execute(key.clone(), pending, store, to_clients);
             None
         } else {
-            // increase rifl count
-            let count =
-                rifl_to_stable_count.get_or(&rifl, || AtomicU64::new(0));
-            let previous_count =
-                count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-            // if we're the last key at this shard increasing the rifl count to
-            // the number of keys in this shard, then notify all keys that the
-            // command is stable at this shard
-            if previous_count + 1 == pending.shard_key_count {
+            // closure that sends the stable message
+            let mut send_stable_msg = || {
                 let msgs = pending.shard_to_keys.iter().flat_map(
                     |(shard_id, shard_keys)| {
                         shard_keys.iter().filter_map(move |shard_key| {
@@ -318,10 +311,33 @@ impl TableExecutor {
                     },
                 );
                 to_executors.extend(msgs);
+                true
+            };
 
-                // the command is stable at this shard; so update the number of
-                // shards the key is stable at
+            if pending.shard_key_count == 1 {
+                // if this command access a single key on this shard, then send
+                // the stable message right away
+                assert!(send_stable_msg());
+                // and update the number of shards the key is stable at
                 pending.missing_stable_shards -= 1;
+            } else {
+                // otherwise, increase rifl count
+                let count =
+                    rifl_to_stable_count.get_or(&rifl, || AtomicU64::new(0));
+                let previous_count =
+                    count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+                // if we're the last key at this shard increasing the rifl count
+                // to the number of keys in this shard, then
+                // notify all keys that the command is stable at
+                // this shard
+                if previous_count + 1 == pending.shard_key_count {
+                    // the command is stable at this shard; so send stable
+                    // messsage
+                    assert!(send_stable_msg());
+                    // and update the number of shards the key is stable at
+                    pending.missing_stable_shards -= 1;
+                }
             }
 
             // check if there's any buffered stable messages
