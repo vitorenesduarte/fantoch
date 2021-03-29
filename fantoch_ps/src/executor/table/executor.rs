@@ -11,9 +11,9 @@ use fantoch::shared::SharedMap;
 use fantoch::time::SysTime;
 use fantoch::trace;
 use fantoch::HashMap;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -27,7 +27,7 @@ pub struct TableExecutor {
     to_clients: VecDeque<ExecutorResult>,
     to_executors: Vec<(ShardId, TableExecutionInfo)>,
     pending: HashMap<Key, PendingPerKey>,
-    rifl_to_stable_count: Arc<SharedMap<Rifl, AtomicU64>>,
+    rifl_to_stable_count: Arc<SharedMap<Rifl, Mutex<u64>>>,
 }
 
 #[derive(Clone, Default)]
@@ -285,7 +285,7 @@ impl TableExecutor {
         to_clients: &mut VecDeque<ExecutorResult>,
         to_executors: &mut Vec<(ShardId, TableExecutionInfo)>,
         stable_shards_buffered: &mut HashMap<Rifl, usize>,
-        rifl_to_stable_count: &Arc<SharedMap<Rifl, AtomicU64>>,
+        rifl_to_stable_count: &Arc<SharedMap<Rifl, Mutex<u64>>>,
     ) -> Option<Pending> {
         let rifl = pending.rifl;
         if pending.single_key_command() {
@@ -317,16 +317,16 @@ impl TableExecutor {
                 pending.missing_stable_shards -= 1;
             } else {
                 // otherwise, increase rifl count
-                let count =
-                    rifl_to_stable_count.get_or(&rifl, || AtomicU64::new(0));
-                let previous_count =
-                    count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let count_ref =
+                    rifl_to_stable_count.get_or(&rifl, || Mutex::new(0));
+                let mut count = count_ref.lock();
+                *count += 1;
 
                 // if we're the last key at this shard increasing the rifl count
                 // to the number of keys in this shard, then
                 // notify all keys that the command is stable at
                 // this shard
-                if previous_count + 1 == pending.shard_key_count {
+                if *count == pending.shard_key_count {
                     // the command is stable at this shard; so send stable
                     // messsage
                     assert!(send_stable_msg());
@@ -335,6 +335,7 @@ impl TableExecutor {
 
                     // cleanup
                     drop(count);
+                    drop(count_ref);
                     rifl_to_stable_count
                         .remove(&rifl)
                         .expect("rifl must exist as a key");
