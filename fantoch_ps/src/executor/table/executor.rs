@@ -295,22 +295,17 @@ impl TableExecutor {
         } else {
             // closure that sends the stable message
             let mut send_stable_msg = || {
-                let msgs = pending.shard_to_keys.iter().flat_map(
-                    |(shard_id, shard_keys)| {
-                        shard_keys.iter().filter_map(move |shard_key| {
-                            if shard_key != key {
-                                let msg = TableExecutionInfo::stable_at_shard(
-                                    shard_key.clone(),
-                                    rifl,
-                                );
-                                Some((*shard_id, msg))
-                            } else {
-                                None
-                            }
-                        })
-                    },
-                );
-                to_executors.extend(msgs);
+                for (shard_id, shard_keys) in pending.shard_to_keys.iter() {
+                    for shard_key in shard_keys {
+                        if shard_key != key {
+                            let msg = TableExecutionInfo::stable_at_shard(
+                                shard_key.clone(),
+                                rifl,
+                            );
+                            to_executors.push((*shard_id, msg));
+                        }
+                    }
+                }
                 true
             };
 
