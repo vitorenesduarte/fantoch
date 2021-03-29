@@ -339,6 +339,7 @@ impl TableExecutor {
                     pending.missing_stable_shards -= 1;
 
                     // cleanup
+                    drop(count);
                     rifl_to_stable_count
                         .remove(&rifl)
                         .expect("rifl must exist as a key");
