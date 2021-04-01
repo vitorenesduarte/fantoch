@@ -72,7 +72,6 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
-    Protocol::CaesarLocked,
     Protocol::NewtAtomic,
     /*
     Protocol::Basic,
@@ -80,6 +79,7 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
     Protocol::EPaxosLocked,
     Protocol::CaesarLocked,
     Protocol::FPaxos,
+    Protocol::CaesarLocked,
     */
 ];
 
@@ -108,8 +108,8 @@ macro_rules! config {
 async fn main() -> Result<(), Report> {
     // fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
-    batching_plot().await
-    // partial_replication_plot().await
+    // batching_plot().await
+    partial_replication_plot().await
 }
 
 #[allow(dead_code)]
@@ -137,20 +137,20 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // for Atlas s=2 zipf=0.7 r=95%:
         // 1024 * 10,
         // for Atlas s=2 zipf=0.7 r=95%:
-        1024 * 12,
+        // 1024 * 12,
         // 1024 * 16,
         // for Atlas s=2 zipf=0.5 r=50% | Atlas s=4 zipf=0.7 r=95%:
-        1024 * 20,
-        1024 * 24,
+        // 1024 * 20,
+        // 1024 * 24,
         1024 * 32,
-        1024 * 34,
+        // 1024 * 34,
         1024 * 36,
         // 1024 * 40,
         // 1024 * 44,
-        // 1024 * 48,
-        // 1024 * 64,
-        // 1024 * 72,
-        // 1024 * 80,
+        1024 * 48,
+        1024 * 64,
+        1024 * 72,
+        1024 * 80,
         // 1024 * 88,
         // 1024 * 96,
         // 1024 * 104,
@@ -161,7 +161,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
     let batch_max_sizes = vec![1];
 
     // shard_counts: 2, 4, 6
-    let shard_count = 2;
+    let shard_count = 6;
     let keys_per_command = 2;
     let payload_size = 100;
     let cpus = 12;
@@ -245,14 +245,14 @@ async fn batching_plot() -> Result<(), Report> {
     ];
 
     let clients_per_region = vec![
-        // 1024,
+        1024,
         // 1024 * 2,
         // 1024 * 4,
-        // 1024 * 8,
-        // 1024 * 16,
-        // 1024 * 20,
+        1024 * 8,
+        1024 * 16,
+        1024 * 20,
         1024 * 24,
-        // 1024 * 28,
+        1024 * 28,
         // 1024 * 44,
         // 1024 * 48,
         // 1024 * 52,
@@ -260,8 +260,7 @@ async fn batching_plot() -> Result<(), Report> {
         // 1024 * 60,
         // 1024 * 64,
     ];
-    let batch_max_sizes = vec![4];
-    // let batch_max_sizes = vec![10000];
+    let batch_max_sizes = vec![1, 10000];
 
     let shard_count = 1;
     let keys_per_command = 1;

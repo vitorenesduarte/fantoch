@@ -259,6 +259,18 @@ fn increasing_load_plot() -> Result<(), Report> {
         */
     ];
 
+    // adjust Caesar name to Caesar*
+    let style_fun = |search: &Search| {
+        let mut style = HashMap::new();
+        if search.protocol == Protocol::CaesarLocked {
+            style.insert(
+                Style::Label,
+                format!("{}*", PlotFmt::protocol_name(search.protocol)),
+            );
+        }
+        style
+    };
+
     let path = format!("plot_increasing_load_heatmap_{}.pdf", top_key_gen);
     fantoch_plot::heatmap_plot_split(
         n,
@@ -266,6 +278,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         clients_per_region.clone(),
         top_key_gen,
         search_refine,
+        Some(Box::new(style_fun)),
         leader,
         PLOT_DIR,
         &path,
@@ -279,6 +292,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         clients_per_region.clone(),
         bottom_key_gen,
         search_refine,
+        Some(Box::new(style_fun)),
         leader,
         PLOT_DIR,
         &path,
@@ -286,7 +300,6 @@ fn increasing_load_plot() -> Result<(), Report> {
     )?;
 
     let search_gen = |(protocol, f)| Search::new(n, f, protocol);
-    let style_fun = None;
     let latency_precision = LatencyPrecision::Millis;
     let x_range = None;
     let y_range = Some((100.0, 1500.0));
@@ -304,7 +317,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         top_key_gen,
         bottom_key_gen,
         search_refine,
-        style_fun,
+        Some(Box::new(style_fun)),
         latency_precision,
         x_range,
         y_range,
@@ -340,7 +353,7 @@ fn batching_plot() -> Result<(), Report> {
     let newt = (Protocol::NewtAtomic, 1);
     let fpaxos = (Protocol::FPaxos, 1);
     let protocols = vec![newt, fpaxos];
-    let newt_batch_max_size = 4;
+    let newt_batch_max_size = 10000;
     let fpaxos_batch_max_size = 10000;
     let search_gen = |(protocol, f)| Search::new(n, f, protocol);
 
@@ -402,12 +415,14 @@ fn batching_plot() -> Result<(), Report> {
 
         let path =
             format!("plot_batching_heatmap_{}_{}.pdf", batching, payload_size);
+        let style_fun = None;
         fantoch_plot::heatmap_plot_split(
             n,
             protocols.clone(),
             clients_per_region.clone(),
             key_gen,
             search_refine,
+            style_fun,
             leader,
             PLOT_DIR,
             &path,
@@ -694,8 +709,7 @@ fn partial_replication_plot() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn partial_replication_all() -> Result<(), Report> {
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_partial_replication";
+    let results_dir = "../results_partial_replication";
     // fixed parameters
     let n = 3;
     let mut key_gens = Vec::new();
@@ -720,7 +734,6 @@ fn partial_replication_all() -> Result<(), Report> {
         (2, 2),
         (4, 2),
         (6, 2),
-        // (8, 2),
     ];
 
     // load results
@@ -1321,8 +1334,7 @@ fn multi_key_all() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
-    let results_dir =
-        "/home/vitor.enes/eurosys_results/results_increasing_load";
+    let results_dir = "../results_increasing_load";
     // fixed parameters
     let shard_count = 1;
     let key_gens = vec![
@@ -1334,13 +1346,9 @@ fn single_key_all() -> Result<(), Report> {
             conflict_rate: 10,
             pool_size: 1,
         },
-        /*
-         */
     ];
-    // let batch_max_sizes = vec![10000, 32, 16, 8, 4, 1];
-    let batch_max_sizes = vec![1];
-    // let payload_sizes = vec![256, 1024, 4096];
-    let payload_sizes = vec![4096];
+    let batch_max_sizes = vec![1, 10000];
+    let payload_sizes = vec![256, 1024, 4096];
     let protocols = vec![
         Protocol::NewtAtomic,
         Protocol::AtlasLocked,
@@ -1479,12 +1487,14 @@ fn single_key_all() -> Result<(), Report> {
                             payload_size,
                         );
 
+                        let style_fun = None;
                         fantoch_plot::heatmap_plot(
                             n,
                             protocol_combinations(n, protocols.clone()),
                             clients_per_region.clone(),
                             key_gen,
                             search_refine,
+                            style_fun,
                             leader,
                             heatmap_metric,
                             PLOT_DIR,

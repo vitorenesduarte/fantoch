@@ -861,6 +861,7 @@ pub fn heatmap_plot<F>(
     clients_per_region: Vec<usize>,
     key_gen: KeyGen,
     search_refine: F,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     leader: ProcessId,
     heatmap_metric: HeatmapMetric,
     output_dir: Option<&str>,
@@ -890,6 +891,7 @@ where
         clients_per_region,
         key_gen,
         search_refine,
+        &style_fun,
         leader,
         heatmap_metric,
         set_xlabels,
@@ -1352,6 +1354,7 @@ pub fn heatmap_plot_split<F>(
     clients_per_region: Vec<usize>,
     key_gen: KeyGen,
     search_refine: F,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     leader: ProcessId,
     output_dir: Option<&str>,
     output_file: &str,
@@ -1397,6 +1400,7 @@ where
             clients_per_region.clone(),
             key_gen,
             search_refine.clone(),
+            &style_fun,
             leader,
             heatmap_metric,
             set_xlabels,
@@ -1424,6 +1428,7 @@ pub fn inner_heatmap_plot<F>(
     clients_per_region: Vec<usize>,
     key_gen: KeyGen,
     search_refine: F,
+    style_fun: &Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     leader: ProcessId,
     heatmap_metric: HeatmapMetric,
     set_xlabels: bool,
@@ -1436,6 +1441,8 @@ where
 {
     // data for all rows
     let mut rows = Vec::with_capacity(protocols.len());
+    // all labels
+    let mut ylabels = Vec::with_capacity(protocols.len());
 
     for (protocol, f) in protocols.iter() {
         // create search
@@ -1511,6 +1518,18 @@ where
 
         // save row
         rows.push(row_data);
+
+        // compute styles
+        let mut styles = style_fun
+            .as_ref()
+            .map(|style_fun| style_fun(&search))
+            .unwrap_or_default();
+
+        // save ylabel
+        let ylabel = styles
+            .remove(&Style::Label)
+            .unwrap_or_else(|| PlotFmt::label(search.protocol, search.f));
+            ylabels.push(ylabel);
     }
 
     // list of colormaps: https://matplotlib.org/tutorials/colors/colormaps.html
@@ -1552,11 +1571,6 @@ where
     ax.set_yticks(yticks, None)?;
     // set ylabels
     if set_ylabels {
-        let ylabels: Vec<_> = protocols
-            .clone()
-            .into_iter()
-            .map(|(protocol, f)| PlotFmt::label(protocol, f))
-            .collect();
         ax.set_yticklabels(ylabels, None)?;
     } else {
         // hide ylabels
@@ -1714,16 +1728,16 @@ pub fn process_metrics_table(
         // CAESAR:
         "wait delay (ms)",
         // "exec delay (ms)",
-        "deps size"
+        "deps size",
+        // NEWT/EPAXOS:
+        "command key count",
         // ATLAS/EPAXOS/JANUS:
         // "chains",
         // "out",
         // "in",
-        // NEWT/EPAXOS:
-        // "command key count",
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
-    let col_widths = vec![0.09, 0.09, 0.07, 0.10, 0.50, 0.23];
+    let col_widths = vec![0.09, 0.09, 0.07, 0.10, 0.27, 0.23, 0.23];
     // let col_widths = vec![0.11, 0.11, 0.07, 0.11, 0.68];
 
     // actual data
@@ -1839,6 +1853,7 @@ pub fn process_metrics_table(
         let in_requests = executor_metrics
             .get_aggregated(ExecutorMetricsKind::InRequests)
             .map(|in_requests| fmt(*in_requests));
+        */
         let command_key_count = protocol_metrics
             .get_collected(ProtocolMetricsKind::CommandKeyCount)
             .map(|command_key_count| {
@@ -1849,7 +1864,6 @@ pub fn process_metrics_table(
                     command_key_count.max().value().round()
                 )
             });
-             */
         // create cell
         let cell = vec![
             fast_path,
@@ -1859,11 +1873,11 @@ pub fn process_metrics_table(
             wait_condition_delay,
             // execution_delay,
             deps_size,
+            command_key_count,
             /*
             chain_size,
             out_requests,
             in_requests,
-            command_key_count,
             */
         ];
         // format cell
