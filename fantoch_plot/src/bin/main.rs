@@ -26,7 +26,7 @@ fn main() -> Result<(), Report> {
     // partial_replication_all()?;
     // multi_key()?;
     // single_key_all()?;
-    // show_distance_matrix();
+    show_distance_matrix();
     eurosys()?;
     Ok(())
 }
@@ -572,6 +572,7 @@ fn partial_replication_plot() -> Result<(), Report> {
         1024 * 40,
         1024 * 44,
         1024 * 48,
+        1024 * 52,
         1024 * 64,
         1024 * 72,
         1024 * 80,
@@ -760,6 +761,7 @@ fn partial_replication_all() -> Result<(), Report> {
         1024 * 40,
         1024 * 44,
         1024 * 48,
+        1024 * 52,
         1024 * 64,
         1024 * 72,
         1024 * 80,
