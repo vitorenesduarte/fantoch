@@ -48,16 +48,6 @@ impl<E: EventSet> ClockGCTrack<E> {
     }
 
     /// Records the set of commands by process `from`.
-    pub fn add_to_clock_of(&mut self, from: ProcessId, dots: Vec<Dot>) {
-        let from_clock = self.all_but_me.entry(from).or_default();
-        for dot in dots {
-            from_clock.add(&dot.source(), dot.sequence());
-        }
-        // make sure we don't record dots from other shards
-        debug_assert_eq!(self.my_clock.len(), self.n);
-    }
-
-    /// Records the set of commands by process `from`.
     pub fn update_clock_of(
         &mut self,
         from: ProcessId,

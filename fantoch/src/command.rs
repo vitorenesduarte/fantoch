@@ -13,6 +13,9 @@ pub const DEFAULT_SHARD_ID: ShardId = 0;
 pub struct Command {
     rifl: Rifl,
     shard_to_ops: HashMap<ShardId, HashMap<Key, Arc<Vec<KVOp>>>>,
+    // mapping from shard to the keys on that shard; this will be used by
+    // `Newt` to exchange `MStable` messages between shards
+    shard_to_keys: Arc<HashMap<ShardId, Vec<Key>>>,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean
     _empty_keys: HashMap<Key, Arc<Vec<KVOp>>>,
@@ -24,20 +27,32 @@ impl Command {
         rifl: Rifl,
         shard_to_ops: HashMap<ShardId, HashMap<Key, Vec<KVOp>>>,
     ) -> Self {
+        let mut shard_to_keys: HashMap<ShardId, Vec<Key>> = Default::default();
+        let shard_to_ops = shard_to_ops
+            .into_iter()
+            .map(|(shard_id, shard_ops)| {
+                (
+                    shard_id,
+                    shard_ops
+                        .into_iter()
+                        .map(|(key, ops)| {
+                            // populate `shard_to_keys`
+                            shard_to_keys
+                                .entry(shard_id)
+                                .or_default()
+                                .push(key.clone());
+
+                            // `Arc` the ops on this key
+                            (key, Arc::new(ops))
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
         Self {
             rifl,
-            shard_to_ops: shard_to_ops
-                .into_iter()
-                .map(|(shard_id, shard_ops)| {
-                    (
-                        shard_id,
-                        shard_ops
-                            .into_iter()
-                            .map(|(key, ops)| (key, Arc::new(ops)))
-                            .collect(),
-                    )
-                })
-                .collect(),
+            shard_to_ops,
+            shard_to_keys: Arc::new(shard_to_keys),
             _empty_keys: HashMap::new(),
         }
     }
@@ -104,6 +119,12 @@ impl Command {
         self.shard_to_ops.iter().flat_map(|(shard_id, shard_ops)| {
             shard_ops.keys().map(move |key| (shard_id, key))
         })
+    }
+
+    /// Returns a mapping from shard identifier to the keys being accessed on
+    /// that shard.
+    pub fn shard_to_keys(&self) -> &Arc<HashMap<ShardId, Vec<Key>>> {
+        &self.shard_to_keys
     }
 
     /// Returns the number of shards accessed by this command.

@@ -595,22 +595,13 @@ impl<KC: KeyClocks> Newt<KC> {
         let execution_info = cmd.iter(self.bp.shard_id).map(|(key, ops)| {
             // find votes on this key
             let key_votes = votes.remove(&key).unwrap_or_default();
-            let other_keys = cmd
-                .all_keys()
-                .filter_map(|(shard_id, shard_key)| {
-                    if key != shard_key {
-                        Some((*shard_id, shard_key.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            let shard_to_keys = cmd.shard_to_keys().clone();
             trace!(
-                "p{}: MCommit({:?}) key {:?} | other keys {:?} | time={}",
+                "p{}: MCommit({:?}) key {:?} | shard to keys {:?} | time={}",
                 _id,
                 dot,
                 key,
-                other_keys,
+                shard_to_keys,
                 _time.micros()
             );
             TableExecutionInfo::attached_votes(
@@ -618,7 +609,7 @@ impl<KC: KeyClocks> Newt<KC> {
                 clock,
                 key.clone(),
                 rifl,
-                other_keys,
+                shard_to_keys,
                 ops.clone(),
                 key_votes,
             )

@@ -301,9 +301,13 @@ mod tests {
         // in this example we'll use the dot as rifl;
         // also, all commands access a single key
         let pending = |value: &'static str, rifl: Rifl| -> Pending {
-            let all_keys = vec![(DEFAULT_SHARD_ID, "KEY".to_string())];
+            let shard_to_keys = Arc::new(
+                vec![(DEFAULT_SHARD_ID, vec!["KEY".to_string()])]
+                    .into_iter()
+                    .collect(),
+            );
             let ops = Arc::new(vec![KVOp::Put(String::from(value))]);
-            Pending::new(rifl, all_keys, ops)
+            Pending::new(DEFAULT_SHARD_ID, rifl, shard_to_keys, ops)
         };
 
         // a1
@@ -491,10 +495,14 @@ mod tests {
 
         // in this example we'll use the dot as rifl;
         // also, all commands access a single key
-        let pending = |value: &'static str, rifl: Rifl| {
-            let all_keys = vec![(DEFAULT_SHARD_ID, "KEY".to_string())];
+        let pending = |value: &'static str, rifl: Rifl| -> Pending {
+            let shard_to_keys = Arc::new(
+                vec![(DEFAULT_SHARD_ID, vec!["KEY".to_string()])]
+                    .into_iter()
+                    .collect(),
+            );
             let ops = Arc::new(vec![KVOp::Put(String::from(value))]);
-            Pending::new(rifl, all_keys, ops)
+            Pending::new(DEFAULT_SHARD_ID, rifl, shard_to_keys, ops)
         };
 
         // a1
