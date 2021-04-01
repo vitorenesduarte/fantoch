@@ -5,7 +5,7 @@
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
 #### Protocols implemented
-- Tempo (EuroSys'21): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
+- [Tempo (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
 - [Atlas (EuroSys'20)](https://vitorenes.org/publication/enes-atlas/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
 - [EPaxos (SOSP'13)](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
 - [FPaxos (OPODIS'16)](https://fpaxos.github.io/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)
@@ -19,6 +19,8 @@
   - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU and network bandwidth are assumed)
   - __running__ the protocols in a real setting
 - this is achieved by providing a __"simulator"__ and a __"runner"__ that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
+
+For more information, consult our paper [Efficient Replication via Timestamp Stability (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/).
 
 ## License
 
