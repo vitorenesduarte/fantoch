@@ -28,13 +28,13 @@ pub struct Config {
     gc_interval: Option<Duration>,
     // starting leader process
     leader: Option<ProcessId>,
-    /// defines whether newt should employ tiny quorums or not
-    newt_tiny_quorums: bool,
+    /// defines whether tempo should employ tiny quorums or not
+    tempo_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
-    newt_clock_bump_interval: Option<Duration>,
-    /// defines the interval the sending of `MDetached` messages in newt, if
+    tempo_clock_bump_interval: Option<Duration>,
+    /// defines the interval the sending of `MDetached` messages in tempo, if
     /// any
-    newt_detached_send_interval: Option<Duration>,
+    tempo_detached_send_interval: Option<Duration>,
     /// defines whether caesar should employ the wait condition
     caesar_wait_condition: bool,
     /// defines whether protocols should try to bypass the fast quorum process
@@ -67,12 +67,12 @@ impl Config {
         let gc_interval = None;
         // by default, there's no leader
         let leader = None;
-        // by default, `newt_tiny_quorums = false`
-        let newt_tiny_quorums = false;
+        // by default, `tempo_tiny_quorums = false`
+        let tempo_tiny_quorums = false;
         // by default, clocks are not bumped periodically
-        let newt_clock_bump_interval = None;
+        let tempo_clock_bump_interval = None;
         // by default, `MDetached` messages are not sent
-        let newt_detached_send_interval = None;
+        let tempo_detached_send_interval = None;
         // by default, `caesar_wait_condition = true`
         let caesar_wait_condition = true;
         // by default `skip_fast_ack = false;
@@ -88,9 +88,9 @@ impl Config {
             executor_monitor_execution_order,
             gc_interval,
             leader,
-            newt_tiny_quorums,
-            newt_clock_bump_interval,
-            newt_detached_send_interval,
+            tempo_tiny_quorums,
+            tempo_clock_bump_interval,
+            tempo_detached_send_interval,
             caesar_wait_condition,
             skip_fast_ack,
         }
@@ -203,40 +203,40 @@ impl Config {
         self.leader = leader.into();
     }
 
-    /// Checks whether newt tiny quorums is enabled or not.
-    pub fn newt_tiny_quorums(&self) -> bool {
-        self.newt_tiny_quorums
+    /// Checks whether tempo tiny quorums is enabled or not.
+    pub fn tempo_tiny_quorums(&self) -> bool {
+        self.tempo_tiny_quorums
     }
 
-    /// Changes the value of `newt_tiny_quorums`.
-    pub fn set_newt_tiny_quorums(&mut self, newt_tiny_quorums: bool) {
-        self.newt_tiny_quorums = newt_tiny_quorums;
+    /// Changes the value of `tempo_tiny_quorums`.
+    pub fn set_tempo_tiny_quorums(&mut self, tempo_tiny_quorums: bool) {
+        self.tempo_tiny_quorums = tempo_tiny_quorums;
     }
 
-    /// Checks newt clock bump interval.
-    pub fn newt_clock_bump_interval(&self) -> Option<Duration> {
-        self.newt_clock_bump_interval
+    /// Checks tempo clock bump interval.
+    pub fn tempo_clock_bump_interval(&self) -> Option<Duration> {
+        self.tempo_clock_bump_interval
     }
 
-    /// Sets newt clock bump interval.
-    pub fn set_newt_clock_bump_interval<I>(&mut self, interval: I)
+    /// Sets tempo clock bump interval.
+    pub fn set_tempo_clock_bump_interval<I>(&mut self, interval: I)
     where
         I: Into<Option<Duration>>,
     {
-        self.newt_clock_bump_interval = interval.into();
+        self.tempo_clock_bump_interval = interval.into();
     }
 
-    /// Checks newt
-    pub fn newt_detached_send_interval(&self) -> Option<Duration> {
-        self.newt_detached_send_interval
+    /// Checks tempo detached send interval.
+    pub fn tempo_detached_send_interval(&self) -> Option<Duration> {
+        self.tempo_detached_send_interval
     }
 
-    /// Sets newt clock bump interval.
-    pub fn set_newt_detached_send_interval<I>(&mut self, interval: I)
+    /// Sets tempo clock bump interval.
+    pub fn set_tempo_detached_send_interval<I>(&mut self, interval: I)
     where
         I: Into<Option<Duration>>,
     {
-        self.newt_detached_send_interval = interval.into();
+        self.tempo_detached_send_interval = interval.into();
     }
 
     /// Checks whether caesar's wait condition is enabled or not.
@@ -299,11 +299,11 @@ impl Config {
         (fast_quorum_size, write_quorum_size)
     }
 
-    /// Computes `Newt` fast quorum size, stability threshold and write quorum
+    /// Computes `Tempo` fast quorum size, stability threshold and write quorum
     /// size.
     ///
     /// The threshold should be n - q + 1, where n is the number of processes
-    /// and q the size of the quorum used to compute clocks. In `Newt` e.g.
+    /// and q the size of the quorum used to compute clocks. In `Tempo` e.g.
     /// with tiny quorums, although the fast quorum is 2f (which would
     /// suggest q = 2f), in fact q = f + 1. The quorum size of 2f ensures that
     /// all clocks are computed from f + 1 processes. So, n - q + 1 = n - (f
@@ -314,11 +314,11 @@ impl Config {
     /// - this ensures that the stability threshold plus the minimum number of
     ///   processes where clocks are computed (i.e. fast_quorum_size - f + 1) is
     ///   greater than n
-    pub fn newt_quorum_sizes(&self) -> (usize, usize, usize) {
+    pub fn tempo_quorum_sizes(&self) -> (usize, usize, usize) {
         let n = self.n;
         let f = self.f;
         let minority = n / 2;
-        let (fast_quorum_size, stability_threshold) = if self.newt_tiny_quorums
+        let (fast_quorum_size, stability_threshold) = if self.tempo_tiny_quorums
         {
             (2 * f, n - f)
         } else {
@@ -410,30 +410,30 @@ mod tests {
         config.set_leader(leader);
         assert_eq!(config.leader(), Some(leader));
 
-        // by default, newt tiny quorums is false
-        assert!(!config.newt_tiny_quorums());
+        // by default, tempo tiny quorums is false
+        assert!(!config.tempo_tiny_quorums());
 
         // if we change it to false, remains false
-        config.set_newt_tiny_quorums(false);
-        assert!(!config.newt_tiny_quorums());
+        config.set_tempo_tiny_quorums(false);
+        assert!(!config.tempo_tiny_quorums());
 
         // if we change it to true, it becomes true
-        config.set_newt_tiny_quorums(true);
-        assert!(config.newt_tiny_quorums());
+        config.set_tempo_tiny_quorums(true);
+        assert!(config.tempo_tiny_quorums());
 
         // by default, there's no clock bump interval
-        assert!(config.newt_clock_bump_interval().is_none());
+        assert!(config.tempo_clock_bump_interval().is_none());
         // but that can change
         let interval = Duration::from_millis(1);
-        config.set_newt_clock_bump_interval(interval);
-        assert_eq!(config.newt_clock_bump_interval(), Some(interval));
+        config.set_tempo_clock_bump_interval(interval);
+        assert_eq!(config.tempo_clock_bump_interval(), Some(interval));
 
         // by default, there's no sending of `MDetached` messages
-        assert!(config.newt_detached_send_interval().is_none());
+        assert!(config.tempo_detached_send_interval().is_none());
         // but that can change
         let interval = Duration::from_millis(2);
-        config.set_newt_detached_send_interval(interval);
-        assert_eq!(config.newt_detached_send_interval(), Some(interval));
+        config.set_tempo_detached_send_interval(interval);
+        assert_eq!(config.tempo_detached_send_interval(), Some(interval));
 
         // by default, caesar wait condition is true
         assert!(config.caesar_wait_condition());
@@ -528,23 +528,23 @@ mod tests {
     }
 
     #[test]
-    fn newt_parameters() {
+    fn tempo_parameters() {
         // tiny quorums = false
         let mut config = Config::new(7, 1);
-        config.set_newt_tiny_quorums(false);
-        assert_eq!(config.newt_quorum_sizes(), (4, 2, 4));
+        config.set_tempo_tiny_quorums(false);
+        assert_eq!(config.tempo_quorum_sizes(), (4, 2, 4));
 
         let mut config = Config::new(7, 2);
-        config.set_newt_tiny_quorums(false);
-        assert_eq!(config.newt_quorum_sizes(), (5, 3, 4));
+        config.set_tempo_tiny_quorums(false);
+        assert_eq!(config.tempo_quorum_sizes(), (5, 3, 4));
 
         // tiny quorums = true
         let mut config = Config::new(7, 1);
-        config.set_newt_tiny_quorums(true);
-        assert_eq!(config.newt_quorum_sizes(), (2, 2, 6));
+        config.set_tempo_tiny_quorums(true);
+        assert_eq!(config.tempo_quorum_sizes(), (2, 2, 6));
 
         let mut config = Config::new(7, 2);
-        config.set_newt_tiny_quorums(true);
-        assert_eq!(config.newt_quorum_sizes(), (4, 3, 5));
+        config.set_tempo_tiny_quorums(true);
+        assert_eq!(config.tempo_quorum_sizes(), (4, 3, 5));
     }
 }

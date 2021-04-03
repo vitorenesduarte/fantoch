@@ -1,5 +1,3 @@
-#![type_length_limit = "5624544"]
-
 use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
@@ -72,7 +70,7 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
-    Protocol::NewtAtomic,
+    Protocol::TempoAtomic,
     /*
     Protocol::Basic,
     Protocol::AtlasLocked,
@@ -86,9 +84,9 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
         let mut config = Config::new($n, $f);
-        config.set_newt_tiny_quorums($tiny_quorums);
+        config.set_tempo_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
-            config.set_newt_clock_bump_interval::<Option<Duration>>(interval);
+            config.set_tempo_clock_bump_interval::<Option<Duration>>(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
         config.set_execute_at_commit(EXECUTE_AT_COMMIT);
@@ -99,7 +97,7 @@ macro_rules! config {
         if let Some(interval) = GC_INTERVAL {
             config.set_gc_interval(interval);
         }
-        config.set_newt_detached_send_interval(SEND_DETACHED_INTERVAL);
+        config.set_tempo_detached_send_interval(SEND_DETACHED_INTERVAL);
         config
     }};
 }
@@ -123,7 +121,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
         // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
     ];
 
@@ -171,7 +169,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
     for coefficient in vec![0.5, 0.7] {
         // janus*:
         // for read_only_percentage in vec![100, 95, 50] {
-        // newt:
+        // tempo:
         for read_only_percentage in vec![0] {
             let key_gen = KeyGen::Zipf {
                 total_keys_per_shard: 1_000_000,
@@ -241,7 +239,7 @@ async fn batching_plot() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
         // (Protocol::FPaxos, config!(n, 1, false, None, false)),
     ];
 
@@ -337,8 +335,8 @@ async fn increasing_load_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::Basic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 2, false, None, false)),
         (Protocol::FPaxos, config!(n, 1, false, None, false)),
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
@@ -440,8 +438,8 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         (Protocol::FPaxos, config!(n, 1, false, None, false)),
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 2, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
@@ -529,8 +527,8 @@ async fn whatever_plot() -> Result<(), Report> {
 
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        /* (Protocol::NewtAtomic, config!(n, 2, false, None, false)), */
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
+        /* (Protocol::TempoAtomic, config!(n, 2, false, None, false)), */
         /*
         (Protocol::FPaxos, config!(n, 1, false, None, false)),
         (Protocol::FPaxos, config!(n, 2, false, None, false)),
@@ -597,12 +595,10 @@ async fn whatever_plot() -> Result<(), Report> {
     // MULTI_KEY
     let configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 2, false, None, false)),
-        (Protocol::NewtLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtLocked, config!(n, 2, false, None, false)),
-        (Protocol::NewtFineLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtFineLocked, config!(n, 2, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 2, false, None, false)),
+        (Protocol::TempoLocked, config!(n, 1, false, None, false)),
+        (Protocol::TempoLocked, config!(n, 2, false, None, false)),
     ];
 
     let clients_per_region =
@@ -624,7 +620,7 @@ async fn whatever_plot() -> Result<(), Report> {
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
-        (Protocol::NewtAtomic, config!(n, 1, false, None, false)),
+        (Protocol::TempoAtomic, config!(n, 1, false, None, false)),
     ];
 
     let clients_per_region = vec![

@@ -57,7 +57,7 @@ impl AggregatePending {
         // get current value:
         // - if it's not part of pending, then ignore it
         // (if it's not part of pending, it means that it is from a client from
-        // another newt process, and `pending.wait_for*` has not been
+        // another tempo process, and `pending.wait_for*` has not been
         // called)
         let cmd_result_builder = self.pending.get_mut(&rifl)?;
 

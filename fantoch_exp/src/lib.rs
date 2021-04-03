@@ -117,8 +117,8 @@ pub enum Protocol {
     EPaxosLocked,
     CaesarLocked,
     FPaxos,
-    NewtAtomic,
-    NewtLocked,
+    TempoAtomic,
+    TempoLocked,
     Basic,
 }
 
@@ -129,8 +129,8 @@ impl Protocol {
             Protocol::EPaxosLocked => "epaxos_locked",
             Protocol::CaesarLocked => "caesar_locked",
             Protocol::FPaxos => "fpaxos",
-            Protocol::NewtAtomic => "newt_atomic",
-            Protocol::NewtLocked => "newt_locked",
+            Protocol::TempoAtomic => "tempo_atomic",
+            Protocol::TempoLocked => "tempo_locked",
             Protocol::Basic => "basic",
         }
     }

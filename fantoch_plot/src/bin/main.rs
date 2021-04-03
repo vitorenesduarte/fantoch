@@ -53,10 +53,10 @@ fn fairness_plot() -> Result<(), Report> {
     };
     let payload_size = 100;
     let protocols = vec![
-        (Protocol::NewtAtomic, 1),
+        (Protocol::TempoAtomic, 1),
         (Protocol::AtlasLocked, 1),
         (Protocol::FPaxos, 1),
-        (Protocol::NewtAtomic, 2),
+        (Protocol::TempoAtomic, 2),
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 2),
         (Protocol::CaesarLocked, 2),
@@ -80,7 +80,7 @@ fn fairness_plot() -> Result<(), Report> {
                     // affect the results
                 }
                 Protocol::AtlasLocked
-                | Protocol::NewtAtomic
+                | Protocol::TempoAtomic
                 | Protocol::CaesarLocked => {
                     search.key_gen(key_gen);
                 }
@@ -135,8 +135,8 @@ fn tail_latency_plot() -> Result<(), Report> {
     };
     let payload_size = 100;
     let protocols = vec![
-        (Protocol::NewtAtomic, 1),
-        (Protocol::NewtAtomic, 2),
+        (Protocol::TempoAtomic, 1),
+        (Protocol::TempoAtomic, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
         (Protocol::CaesarLocked, 2),
@@ -229,7 +229,7 @@ fn increasing_load_plot() -> Result<(), Report> {
                 // contention does not affect the results
             }
             Protocol::AtlasLocked
-            | Protocol::NewtAtomic
+            | Protocol::TempoAtomic
             | Protocol::EPaxosLocked
             | Protocol::CaesarLocked
             | Protocol::Basic => {
@@ -246,8 +246,8 @@ fn increasing_load_plot() -> Result<(), Report> {
     };
 
     let protocols = vec![
-        (Protocol::NewtAtomic, 1),
-        (Protocol::NewtAtomic, 2),
+        (Protocol::TempoAtomic, 1),
+        (Protocol::TempoAtomic, 2),
         (Protocol::AtlasLocked, 1),
         (Protocol::AtlasLocked, 2),
         (Protocol::FPaxos, 1),
@@ -350,10 +350,10 @@ fn batching_plot() -> Result<(), Report> {
     };
 
     let n = 5;
-    let newt = (Protocol::NewtAtomic, 1);
+    let tempo = (Protocol::TempoAtomic, 1);
     let fpaxos = (Protocol::FPaxos, 1);
-    let protocols = vec![newt, fpaxos];
-    let newt_batch_max_size = 10000;
+    let protocols = vec![tempo, fpaxos];
+    let tempo_batch_max_size = 10000;
     let fpaxos_batch_max_size = 10000;
     let search_gen = |(protocol, f)| Search::new(n, f, protocol);
 
@@ -403,7 +403,7 @@ fn batching_plot() -> Result<(), Report> {
             // set batch max size if batching
             let batch_max_size = if batching {
                 match search.protocol {
-                    Protocol::NewtAtomic => newt_batch_max_size,
+                    Protocol::TempoAtomic => tempo_batch_max_size,
                     Protocol::FPaxos => fpaxos_batch_max_size,
                     _ => panic!("unsupported protocol: {:?}", search.protocol),
                 }
@@ -463,7 +463,7 @@ fn batching_plot() -> Result<(), Report> {
         for (search, max_throughput) in max_throughputs {
             let name = match search.protocol {
                 Protocol::FPaxos => "fpaxos",
-                Protocol::NewtAtomic => "newt  ",
+                Protocol::TempoAtomic => "tempo ",
                 _ => unreachable!(),
             };
             println!(
@@ -478,13 +478,15 @@ fn batching_plot() -> Result<(), Report> {
     }
 
     // create searches
-    let searches: Vec<_> =
-        vec![(newt, newt_batch_max_size), (fpaxos, fpaxos_batch_max_size)]
-            .into_iter()
-            .map(|(search_gen_input, batch_max_size)| {
-                (search_gen(search_gen_input), batch_max_size)
-            })
-            .collect();
+    let searches: Vec<_> = vec![
+        (tempo, tempo_batch_max_size),
+        (fpaxos, fpaxos_batch_max_size),
+    ]
+    .into_iter()
+    .map(|(search_gen_input, batch_max_size)| {
+        (search_gen(search_gen_input), batch_max_size)
+    })
+    .collect();
     let style_fun = None;
     let path = format!("plot_batching.pdf");
     let y_range = Some((0.0, 800.0));
@@ -504,7 +506,7 @@ fn scalability_plot() -> Result<(), Report> {
     let f = 1;
     let payload_size = 100;
     let keys_per_command = 1;
-    let protocol = Protocol::NewtAtomic;
+    let protocol = Protocol::TempoAtomic;
 
     let coefficients = vec![
         0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0,
@@ -586,7 +588,7 @@ fn partial_replication_plot() -> Result<(), Report> {
     ];
 
     let protocols = vec![
-        (Protocol::NewtAtomic, 0),
+        (Protocol::TempoAtomic, 0),
         (Protocol::AtlasLocked, 100),
         (Protocol::AtlasLocked, 95),
         (Protocol::AtlasLocked, 50),
@@ -601,7 +603,7 @@ fn partial_replication_plot() -> Result<(), Report> {
     let style_fun = |search: &Search| {
         let mut style = HashMap::new();
         match search.protocol {
-            Protocol::NewtAtomic => {
+            Protocol::TempoAtomic => {
                 style.insert(
                     Style::Label,
                     format!("{}", PlotFmt::protocol_name(search.protocol)),
@@ -615,8 +617,8 @@ fn partial_replication_plot() -> Result<(), Report> {
 
                 let (protocol, f) = match ro {
                     100 => (Protocol::Basic, 2),
-                    95 => (Protocol::NewtLocked, 1),
-                    50 => (Protocol::NewtLocked, 2),
+                    95 => (Protocol::TempoLocked, 1),
+                    50 => (Protocol::TempoLocked, 2),
                     _ => panic!("unsupported read-only percentage: {:?}", ro),
                 };
                 style.insert(Style::Color, PlotFmt::color(protocol, f));
@@ -725,7 +727,7 @@ fn partial_replication_all() -> Result<(), Report> {
         key_gens.push((key_gen, x_range, y_range));
     }
     let payload_size = 100;
-    let protocols = vec![Protocol::AtlasLocked, Protocol::NewtAtomic];
+    let protocols = vec![Protocol::AtlasLocked, Protocol::TempoAtomic];
     let latency_precision = LatencyPrecision::Millis;
 
     let shard_combinations = vec![
@@ -776,12 +778,12 @@ fn partial_replication_all() -> Result<(), Report> {
 
     let search_refine = |search: &mut Search, read_only_percentage: usize| {
         match search.protocol {
-            Protocol::NewtAtomic => {
-                // if newt atomic, don't filter by read-only percentage as reads
+            Protocol::TempoAtomic => {
+                // if tempo atomic, don't filter by read-only percentage as reads
                 // are not treated in any special way there, and thus, it does
                 // not affect the results
             }
-            Protocol::AtlasLocked | Protocol::NewtLocked => {
+            Protocol::AtlasLocked | Protocol::TempoLocked => {
                 search.read_only_percentage(read_only_percentage);
             }
             _ => {
@@ -1105,7 +1107,7 @@ fn multi_key_all() -> Result<(), Report> {
     let shard_count = 1;
     let n = 3;
     let payload_size = 100;
-    let protocols = vec![Protocol::NewtAtomic];
+    let protocols = vec![Protocol::TempoAtomic];
     let latency_precision = LatencyPrecision::Micros;
 
     // load results
@@ -1352,7 +1354,7 @@ fn single_key_all() -> Result<(), Report> {
     let batch_max_sizes = vec![1, 10000];
     let payload_sizes = vec![256, 1024, 4096];
     let protocols = vec![
-        Protocol::NewtAtomic,
+        Protocol::TempoAtomic,
         Protocol::AtlasLocked,
         Protocol::EPaxosLocked,
         Protocol::FPaxos,
@@ -1408,7 +1410,7 @@ fn single_key_all() -> Result<(), Report> {
                                     // contention does not affect the results
                                 }
                                 Protocol::AtlasLocked
-                                | Protocol::NewtAtomic
+                                | Protocol::TempoAtomic
                                 | Protocol::EPaxosLocked
                                 | Protocol::CaesarLocked => {
                                     search.key_gen(key_gen);
@@ -1531,7 +1533,7 @@ fn single_key_all() -> Result<(), Report> {
                                             // results
                                         }
                                         Protocol::AtlasLocked
-                                        | Protocol::NewtAtomic
+                                        | Protocol::TempoAtomic
                                         | Protocol::EPaxosLocked
                                         | Protocol::CaesarLocked => {
                                             search.key_gen(key_gen);
@@ -1643,7 +1645,7 @@ fn single_key_all() -> Result<(), Report> {
 
                         // create searches without fpaxos for cdf plots
                         let protocols = vec![
-                            Protocol::NewtAtomic,
+                            Protocol::TempoAtomic,
                             Protocol::AtlasLocked,
                             Protocol::EPaxosLocked,
                         ];

@@ -1729,7 +1729,7 @@ pub fn process_metrics_table(
         "wait delay (ms)",
         // "exec delay (ms)",
         "deps size",
-        // NEWT/EPAXOS:
+        // TEMPO/EPAXOS:
         "command key count",
         // ATLAS/EPAXOS/JANUS:
         // "chains",

@@ -21,15 +21,15 @@ use std::mem;
 use std::time::Duration;
 use threshold::VClock;
 
-pub type NewtSequential = Newt<SequentialKeyClocks>;
-pub type NewtAtomic = Newt<AtomicKeyClocks>;
-pub type NewtLocked = Newt<LockedKeyClocks>;
+pub type TempoSequential = Tempo<SequentialKeyClocks>;
+pub type TempoAtomic = Tempo<AtomicKeyClocks>;
+pub type TempoLocked = Tempo<LockedKeyClocks>;
 
 #[derive(Debug, Clone)]
-pub struct Newt<KC: KeyClocks> {
+pub struct Tempo<KC: KeyClocks> {
     bp: BaseProcess,
     key_clocks: KC,
-    cmds: SequentialCommandsInfo<NewtInfo>,
+    cmds: SequentialCommandsInfo<TempoInfo>,
     gc_track: VClockGCTrack,
     to_processes: Vec<Action<Self>>,
     to_executors: Vec<TableExecutionInfo>,
@@ -42,19 +42,19 @@ pub struct Newt<KC: KeyClocks> {
     buffered_mbumps: HashMap<Dot, u64>,
     // With many many operations, it can happen that traceical clocks are
     // higher that current time (e.g. if it starts at 0 in simulation), and in
-    // that case, the real time feature of newt doesn't work. Solution: track
+    // that case, the real time feature of tempo doesn't work. Solution: track
     // the highest committed clock; when periodically bumping with real time,
     // use this value as the minimum value to bump to
     max_commit_clock: u64,
     skip_fast_ack: bool,
 }
 
-impl<KC: KeyClocks> Protocol for Newt<KC> {
+impl<KC: KeyClocks> Protocol for Tempo<KC> {
     type Message = Message;
     type PeriodicEvent = PeriodicEvent;
     type Executor = TableExecutor;
 
-    /// Creates a new `Newt` process.
+    /// Creates a new `Tempo` process.
     fn new(
         process_id: ProcessId,
         shard_id: ShardId,
@@ -62,7 +62,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     ) -> (Self, Vec<(Self::PeriodicEvent, Duration)>) {
         // compute fast and write quorum sizes
         let (fast_quorum_size, write_quorum_size, _) =
-            config.newt_quorum_sizes();
+            config.tempo_quorum_sizes();
 
         // create protocol data-structures
         let bp = BaseProcess::new(
@@ -92,7 +92,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         // is 2
         let skip_fast_ack = config.skip_fast_ack() && fast_quorum_size == 2;
 
-        // create `Newt`
+        // create `Tempo`
         let protocol = Self {
             bp,
             key_clocks,
@@ -115,13 +115,13 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
         };
 
         // maybe create clock bump periodic event
-        if let Some(interval) = config.newt_clock_bump_interval() {
+        if let Some(interval) = config.tempo_clock_bump_interval() {
             events.reserve_exact(1);
             events.push((PeriodicEvent::ClockBump, interval));
         }
 
         // maybe create send detached periodic event
-        if let Some(interval) = config.newt_detached_send_interval() {
+        if let Some(interval) = config.tempo_detached_send_interval() {
             events.reserve_exact(1);
             events.push((PeriodicEvent::SendDetached, interval));
         }
@@ -262,7 +262,7 @@ impl<KC: KeyClocks> Protocol for Newt<KC> {
     }
 }
 
-impl<KC: KeyClocks> Newt<KC> {
+impl<KC: KeyClocks> Tempo<KC> {
     /// Handles a submit operation by a client.
     fn handle_submit(
         &mut self,
@@ -376,7 +376,7 @@ impl<KC: KeyClocks> Newt<KC> {
             // - if we received the `MCommit` before the `MCollect`, handle the
             //   `MCommit` now
 
-            if self.bp.config.newt_clock_bump_interval().is_some() {
+            if self.bp.config.tempo_clock_bump_interval().is_some() {
                 // make sure there's a clock for each existing key:
                 // - this ensures that all clocks will be bumped in the periodic
                 //   clock bump event
@@ -625,7 +625,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
         // don't try to generate detached votes if configured with real time
         // (since it will be done in a periodic event)
-        if self.bp.config.newt_clock_bump_interval().is_some() {
+        if self.bp.config.tempo_clock_bump_interval().is_some() {
             // in this case, only notify the clock bump worker of the commit
             // clock
             self.to_processes.push(Action::ToForward {
@@ -1050,7 +1050,7 @@ impl<KC: KeyClocks> Newt<KC> {
 
     fn mcommit_actions(
         bp: &BaseProcess,
-        info: &mut NewtInfo,
+        info: &mut TempoInfo,
         shard_count: usize,
         dot: Dot,
         clock: u64,
@@ -1099,10 +1099,10 @@ fn proposal_gen(_values: HashMap<ProcessId, ConsensusValue>) -> ConsensusValue {
     todo!("recovery not implemented yet")
 }
 
-// `NewtInfo` contains all information required in the life-cyle of a
+// `TempoInfo` contains all information required in the life-cyle of a
 // `Command`
 #[derive(Debug, Clone)]
-struct NewtInfo {
+struct TempoInfo {
     status: Status,
     quorum: HashSet<ProcessId>,
     synod: Synod<u64>,
@@ -1118,7 +1118,7 @@ struct NewtInfo {
     shards_commits: Option<ShardsCommits<ShardsCommitsInfo>>,
 }
 
-impl Info for NewtInfo {
+impl Info for TempoInfo {
     fn new(
         process_id: ProcessId,
         _shard_id: ShardId,
@@ -1156,7 +1156,7 @@ impl ShardsCommitsInfo {
     }
 }
 
-// `Newt` protocol messages
+// `Tempo` protocol messages
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Message {
     // Protocol messages
@@ -1304,16 +1304,16 @@ mod tests {
     use fantoch::time::SimTime;
 
     #[test]
-    fn sequential_newt_test() {
-        newt_flow::<SequentialKeyClocks>();
+    fn sequential_tempo_test() {
+        tempo_flow::<SequentialKeyClocks>();
     }
 
     #[test]
-    fn atomic_newt_test() {
-        newt_flow::<AtomicKeyClocks>();
+    fn atomic_tempo_test() {
+        tempo_flow::<AtomicKeyClocks>();
     }
 
-    fn newt_flow<KC: KeyClocks>() {
+    fn tempo_flow<KC: KeyClocks>() {
         // create simulation
         let mut simulation = Simulation::new();
 
@@ -1349,7 +1349,7 @@ mod tests {
         let mut config = Config::new(n, f);
         // set tiny quorums to false so that the "skip mcollect ack optimization
         // doesn't kick in"
-        config.set_newt_tiny_quorums(false);
+        config.set_tempo_tiny_quorums(false);
 
         // make sure stability is running
         config.set_gc_interval(Duration::from_millis(100));
@@ -1359,35 +1359,35 @@ mod tests {
         let executor_2 = TableExecutor::new(process_id_2, shard_id, config);
         let executor_3 = TableExecutor::new(process_id_3, shard_id, config);
 
-        // newts
-        let (mut newt_1, _) = Newt::<KC>::new(process_id_1, shard_id, config);
-        let (mut newt_2, _) = Newt::<KC>::new(process_id_2, shard_id, config);
-        let (mut newt_3, _) = Newt::<KC>::new(process_id_3, shard_id, config);
+        // tempos
+        let (mut tempo_1, _) = Tempo::<KC>::new(process_id_1, shard_id, config);
+        let (mut tempo_2, _) = Tempo::<KC>::new(process_id_2, shard_id, config);
+        let (mut tempo_3, _) = Tempo::<KC>::new(process_id_3, shard_id, config);
 
-        // discover processes in all newts
+        // discover processes in all tempos
         let sorted = util::sort_processes_by_distance(
             &europe_west2,
             &planet,
             processes.clone(),
         );
-        newt_1.discover(sorted);
+        tempo_1.discover(sorted);
         let sorted = util::sort_processes_by_distance(
             &europe_west3,
             &planet,
             processes.clone(),
         );
-        newt_2.discover(sorted);
+        tempo_2.discover(sorted);
         let sorted = util::sort_processes_by_distance(
             &us_west1,
             &planet,
             processes.clone(),
         );
-        newt_3.discover(sorted);
+        tempo_3.discover(sorted);
 
         // register processes
-        simulation.register_process(newt_1, executor_1);
-        simulation.register_process(newt_2, executor_2);
-        simulation.register_process(newt_3, executor_3);
+        simulation.register_process(tempo_1, executor_1);
+        simulation.register_process(tempo_2, executor_2);
+        simulation.register_process(tempo_3, executor_3);
 
         // client workload
         let shard_count = 1;
@@ -1406,7 +1406,7 @@ mod tests {
             payload_size,
         );
 
-        // create client 1 that is connected to newt 1
+        // create client 1 that is connected to tempo 1
         let client_id = 1;
         let client_region = europe_west2.clone();
         let status_frequency = None;
@@ -1423,13 +1423,13 @@ mod tests {
             .expect("there should be a first operation");
         let target = client_1.shard_process(&target_shard);
 
-        // check that `target` is newt 1
+        // check that `target` is tempo 1
         assert_eq!(target, process_id_1);
 
         // register clients
         simulation.register_client(client_1);
 
-        // register command in executor and submit it in newt 1
+        // register command in executor and submit it in tempo 1
         let (process, _, pending, time) = simulation.get_process(target);
         pending.wait_for(&cmd);
         process.submit(None, cmd, time);

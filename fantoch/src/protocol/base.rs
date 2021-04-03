@@ -5,7 +5,7 @@ use crate::trace;
 use crate::{HashMap, HashSet};
 use std::iter::FromIterator;
 
-// a `BaseProcess` has all functionalities shared by Atlas, Newt, ...
+// a `BaseProcess` has all functionalities shared by Atlas, Tempo, ...
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaseProcess {
     pub process_id: ProcessId,

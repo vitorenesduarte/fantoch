@@ -23,8 +23,8 @@ impl PlotFmt {
             Protocol::EPaxosLocked => "EPaxos",
             Protocol::CaesarLocked => "Caesar",
             Protocol::FPaxos => "FPaxos",
-            Protocol::NewtAtomic => "Tempo",
-            Protocol::NewtLocked => "Tempo-L",
+            Protocol::TempoAtomic => "Tempo",
+            Protocol::TempoLocked => "Tempo-L",
             Protocol::Basic => "Inconsistent",
         }
     }
@@ -47,10 +47,10 @@ impl PlotFmt {
             (Protocol::CaesarLocked, _) => "#bdc3c7",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
-            (Protocol::NewtAtomic, 1) => "#f1c40f",
-            (Protocol::NewtAtomic, 2) => "#e67e22",
-            (Protocol::NewtLocked, 1) => "#2980b9", // "#111111"
-            (Protocol::NewtLocked, 2) => "#c23616", // "#333333"
+            (Protocol::TempoAtomic, 1) => "#f1c40f",
+            (Protocol::TempoAtomic, 2) => "#e67e22",
+            (Protocol::TempoLocked, 1) => "#2980b9", // "#111111"
+            (Protocol::TempoLocked, 2) => "#c23616", // "#333333"
             (Protocol::Basic, _) => "#576574",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
@@ -63,7 +63,7 @@ impl PlotFmt {
         match protocol {
             Protocol::AtlasLocked => "#ecf0f1",
             Protocol::FPaxos => "#95a5a6",
-            Protocol::NewtAtomic => "#353b48",
+            Protocol::TempoAtomic => "#353b48",
             _ => panic!(
                 "PlotFmt::background_color: protocol = {:?} not supported!",
                 protocol
@@ -81,10 +81,10 @@ impl PlotFmt {
             (Protocol::CaesarLocked, _) => "\\\\",
             (Protocol::AtlasLocked, 1) => "///", // 2
             (Protocol::AtlasLocked, 2) => "\\\\\\",
-            (Protocol::NewtLocked, 1) => "////", // 4
-            (Protocol::NewtLocked, 2) => "\\\\\\\\",
-            (Protocol::NewtAtomic, 1) => "//////", //  6
-            (Protocol::NewtAtomic, 2) => "\\\\\\\\\\\\",
+            (Protocol::TempoLocked, 1) => "////", // 4
+            (Protocol::TempoLocked, 2) => "\\\\\\\\",
+            (Protocol::TempoAtomic, 1) => "//////", //  6
+            (Protocol::TempoAtomic, 2) => "\\\\\\\\\\\\",
             (Protocol::Basic, _) => "\\\\\\\\\\\\", // 6
             _ => panic!(
                 "PlotFmt::hatch: protocol = {:?} and f = {} combination not supported!",
@@ -102,10 +102,10 @@ impl PlotFmt {
             (Protocol::CaesarLocked, _) => "H",
             (Protocol::FPaxos, 1) => "+",
             (Protocol::FPaxos, 2) => "x",
-            (Protocol::NewtAtomic, 1) => "v",
-            (Protocol::NewtAtomic, 2) => "^",
-            (Protocol::NewtLocked, 1) => "o",
-            (Protocol::NewtLocked, 2) => "s",
+            (Protocol::TempoAtomic, 1) => "v",
+            (Protocol::TempoAtomic, 2) => "^",
+            (Protocol::TempoLocked, 1) => "o",
+            (Protocol::TempoLocked, 2) => "s",
             (Protocol::Basic, 1) => "p",
             (Protocol::Basic, 2) => "P",
             _ => panic!(
@@ -122,8 +122,8 @@ impl PlotFmt {
             (Protocol::EPaxosLocked, _) => ":",
             (Protocol::CaesarLocked, _) => ":",
             (Protocol::FPaxos, _) => "-.",
-            (Protocol::NewtAtomic, _) => "-",
-            (Protocol::NewtLocked, _) => "-",
+            (Protocol::TempoAtomic, _) => "-",
+            (Protocol::TempoLocked, _) => "-",
             (Protocol::Basic, _) => ":",
         }
         .to_string()

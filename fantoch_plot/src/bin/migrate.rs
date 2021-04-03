@@ -20,7 +20,7 @@ pub enum PreviousKeyGen {
     },
     Zipf {
         coefficient: f64,
-        keys_per_shard: usize,
+        total_keys_per_shard: usize,
     },
 }
 
@@ -67,13 +67,13 @@ pub struct PreviousConfig {
     gc_interval: Option<Duration>,
     // starting leader process
     leader: Option<ProcessId>,
-    /// defines whether newt should employ tiny quorums or not
-    newt_tiny_quorums: bool,
+    /// defines whether tempo should employ tiny quorums or not
+    tempo_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
-    newt_clock_bump_interval: Option<Duration>,
-    /// defines the interval the sending of `MDetached` messages in newt, if
+    tempo_clock_bump_interval: Option<Duration>,
+    /// defines the interval the sending of `MDetached` messages in tempo, if
     /// any
-    newt_detached_send_interval: Option<Duration>,
+    tempo_detached_send_interval: Option<Duration>,
     /// defines whether caesar should employ the wait condition
     caesar_wait_condition: bool,
     /// defines whether protocols should try to bypass the fast quorum process
@@ -111,9 +111,7 @@ fn main() -> Result<(), Report> {
         // "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency",
         // "/home/vitor.enes/eurosys_results/results_increasing_load",
         // "/home/vitor.enes/eurosys_results/results_partial_replication",
-        // "/home/vitor.enes/fantoch/results_fairness_and_tail_latency",
-        // "/home/vitor.enes/fantoch/results_fairness_and_tail_latency_2",
-        // "/home/vitor.enes/fantoch/results_increasing_load",
+        // "/home/vitor.enes/eurosys_results/results_batching",
     ] {
         // load results
         let timestamps =
@@ -148,10 +146,10 @@ fn main() -> Result<(), Report> {
                         },
                         PreviousKeyGen::Zipf {
                             coefficient,
-                            keys_per_shard,
+                            total_keys_per_shard,
                         } => KeyGen::Zipf {
                             coefficient,
-                            total_keys_per_shard: keys_per_shard,
+                            total_keys_per_shard,
                         },
                     };
 
@@ -188,14 +186,14 @@ fn main() -> Result<(), Report> {
                     );
                     config.set_gc_interval(previous.config.gc_interval);
                     config.set_leader(previous.config.leader);
-                    config.set_newt_tiny_quorums(
-                        previous.config.newt_tiny_quorums,
+                    config.set_tempo_tiny_quorums(
+                        previous.config.tempo_tiny_quorums,
                     );
-                    config.set_newt_clock_bump_interval(
-                        previous.config.newt_clock_bump_interval,
+                    config.set_tempo_clock_bump_interval(
+                        previous.config.tempo_clock_bump_interval,
                     );
-                    config.set_newt_detached_send_interval(
-                        previous.config.newt_detached_send_interval,
+                    config.set_tempo_detached_send_interval(
+                        previous.config.tempo_detached_send_interval,
                     );
                     config.set_caesar_wait_condition(
                         previous.config.caesar_wait_condition,

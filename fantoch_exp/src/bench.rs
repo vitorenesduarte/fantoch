@@ -95,10 +95,10 @@ pub async fn bench_experiment(
                         continue;
                     }
 
-                    if protocol == Protocol::NewtAtomic
+                    if protocol == Protocol::TempoAtomic
                         && workload.read_only_percentage() > 0
                     {
-                        panic!("NewtAtomic doesn't support read-only commands")
+                        panic!("TempoAtomic doesn't support read-only commands")
                     }
 
                     if let KeyGen::ConflictPool { .. } = workload.key_gen() {
