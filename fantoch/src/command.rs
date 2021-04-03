@@ -14,7 +14,7 @@ pub struct Command {
     rifl: Rifl,
     shard_to_ops: HashMap<ShardId, HashMap<Key, Arc<Vec<KVOp>>>>,
     // mapping from shard to the keys on that shard; this will be used by
-    // `Newt` to exchange `MStable` messages between shards
+    // `Tempo` to exchange `MStable` messages between shards
     shard_to_keys: Arc<HashMap<ShardId, Vec<Key>>>,
     // field used to output and empty iterator of keys when rustc can't figure
     // out what we mean

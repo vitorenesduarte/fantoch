@@ -5,7 +5,7 @@
 ### `fantoch`: framework for evaluating (planet-scale) consensus protocols
 
 #### Protocols implemented
-- [Tempo (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/newt.rs)
+- [Tempo (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/tempo.rs)
 - [Atlas (EuroSys'20)](https://vitorenes.org/publication/enes-atlas/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/atlas.rs)
 - [EPaxos (SOSP'13)](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/epaxos.rs)
 - [FPaxos (OPODIS'16)](https://fpaxos.github.io/): [source](https://github.com/vitorenesduarte/fantoch/tree/master/fantoch_ps/src/protocol/fpaxos.rs)

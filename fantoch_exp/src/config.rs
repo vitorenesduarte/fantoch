@@ -37,7 +37,7 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<Duration> =
 // - in AWS 10000 is not enough; setting it to 100k
 // - in Apollo with 32k clients per site, 100k is not enough at the fpaxos
 //   leader; setting it to 1M
-// - in Apollo with 16k clients per site, 1M is not enough with newt; setting it
+// - in Apollo with 16k clients per site, 1M is not enough with tempo; setting it
 //   to 100M (since 10M is also not enough)
 const PROCESS_CHANNEL_BUFFER_SIZE: usize = 100_000_000;
 const CLIENT_CHANNEL_BUFFER_SIZE: usize = 10_000;
@@ -177,18 +177,18 @@ impl ProtocolConfig {
             args.extend(args!["--leader", leader]);
         }
         args.extend(args![
-            "--newt_tiny_quorums",
-            self.config.newt_tiny_quorums()
+            "--tempo_tiny_quorums",
+            self.config.tempo_tiny_quorums()
         ]);
-        if let Some(interval) = self.config.newt_clock_bump_interval() {
+        if let Some(interval) = self.config.tempo_clock_bump_interval() {
             args.extend(args![
-                "--newt_clock_bump_interval",
+                "--tempo_clock_bump_interval",
                 interval.as_millis()
             ]);
         }
-        if let Some(interval) = self.config.newt_detached_send_interval() {
+        if let Some(interval) = self.config.tempo_detached_send_interval() {
             args.extend(args![
-                "--newt_detached_send_interval",
+                "--tempo_detached_send_interval",
                 interval.as_millis()
             ]);
         }
@@ -250,7 +250,7 @@ fn workers_executors_and_leader(
     config: &mut Config,
 ) -> (usize, usize) {
     let f = |executors| (WORKERS + EXECUTORS - executors, executors);
-    // for all protocol but newt, create a single executor
+    // for all protocol but tempo, create a single executor
     match protocol {
         // 1 extra executor for partial replication
         Protocol::AtlasLocked => f(2),
@@ -263,8 +263,8 @@ fn workers_executors_and_leader(
             config.set_leader(LEADER);
             f(1)
         }
-        Protocol::NewtAtomic => f(EXECUTORS),
-        Protocol::NewtLocked => f(EXECUTORS),
+        Protocol::TempoAtomic => f(EXECUTORS),
+        Protocol::TempoLocked => f(EXECUTORS),
         Protocol::Basic => f(EXECUTORS),
     }
 }

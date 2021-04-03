@@ -7,8 +7,8 @@ mod atlas;
 // This module contains the definition of `EPaxos`.
 mod epaxos;
 
-// This module contains the definition of `Newt`.
-mod newt;
+// This module contains the definition of `Tempo`.
+mod tempo;
 
 // This module contains the definition of `FPaxos`.
 mod fpaxos;
@@ -24,7 +24,7 @@ pub use atlas::{AtlasLocked, AtlasSequential};
 pub use caesar::CaesarLocked;
 pub use epaxos::{EPaxosLocked, EPaxosSequential};
 pub use fpaxos::FPaxos;
-pub use newt::{NewtAtomic, NewtLocked, NewtSequential};
+pub use tempo::{TempoAtomic, TempoLocked, TempoSequential};
 
 #[cfg(test)]
 mod tests {
@@ -62,17 +62,17 @@ mod tests {
         }};
     }
 
-    macro_rules! newt_config {
+    macro_rules! tempo_config {
         ($n:expr, $f:expr) => {{
             let mut config = Config::new($n, $f);
-            // always set `newt_detached_send_interval`
-            config.set_newt_detached_send_interval(Duration::from_millis(100));
+            // always set `tempo_detached_send_interval`
+            config.set_tempo_detached_send_interval(Duration::from_millis(100));
             config
         }};
         ($n:expr, $f:expr, $clock_bump_interval:expr) => {{
-            let mut config = newt_config!($n, $f);
-            config.set_newt_tiny_quorums(true);
-            config.set_newt_clock_bump_interval($clock_bump_interval);
+            let mut config = tempo_config!($n, $f);
+            config.set_tempo_tiny_quorums(true);
+            config.set_tempo_clock_bump_interval($clock_bump_interval);
             config
         }};
     }
@@ -112,11 +112,11 @@ mod tests {
         }
     }
 
-    // ---- newt tests ---- //
+    // ---- tempo tests ---- //
     #[test]
-    fn sim_newt_3_1_test() {
-        let slow_paths = sim_test::<NewtSequential>(
-            newt_config!(3, 1),
+    fn sim_tempo_3_1_test() {
+        let slow_paths = sim_test::<TempoSequential>(
+            tempo_config!(3, 1),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -124,12 +124,12 @@ mod tests {
     }
 
     #[test]
-    fn sim_real_time_newt_3_1_test() {
+    fn sim_real_time_tempo_3_1_test() {
         // NOTE: with n = 3 we don't really need real time clocks to get the
         // best results
         let clock_bump_interval = Duration::from_millis(50);
-        let slow_paths = sim_test::<NewtSequential>(
-            newt_config!(3, 1, clock_bump_interval),
+        let slow_paths = sim_test::<TempoSequential>(
+            tempo_config!(3, 1, clock_bump_interval),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -137,9 +137,9 @@ mod tests {
     }
 
     #[test]
-    fn sim_newt_5_1_test() {
-        let slow_paths = sim_test::<NewtSequential>(
-            newt_config!(5, 1),
+    fn sim_tempo_5_1_test() {
+        let slow_paths = sim_test::<TempoSequential>(
+            tempo_config!(5, 1),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -147,9 +147,9 @@ mod tests {
     }
 
     #[test]
-    fn sim_newt_5_2_test() {
-        let slow_paths = sim_test::<NewtSequential>(
-            newt_config!(5, 2),
+    fn sim_tempo_5_2_test() {
+        let slow_paths = sim_test::<TempoSequential>(
+            tempo_config!(5, 2),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -157,10 +157,10 @@ mod tests {
     }
 
     #[test]
-    fn sim_real_time_newt_5_1_test() {
+    fn sim_real_time_tempo_5_1_test() {
         let clock_bump_interval = Duration::from_millis(50);
-        let slow_paths = sim_test::<NewtSequential>(
-            newt_config!(5, 1, clock_bump_interval),
+        let slow_paths = sim_test::<TempoSequential>(
+            tempo_config!(5, 1, clock_bump_interval),
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -168,13 +168,13 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_3_1_atomic_test() {
-        // newt atomic can handle as many workers as we want but we may want to
+    fn run_tempo_3_1_atomic_test() {
+        // tempo atomic can handle as many workers as we want but we may want to
         // only have one executor
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(3, 1),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(3, 1),
             SHARD_COUNT,
             workers,
             executors,
@@ -185,11 +185,11 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_3_1_locked_test() {
+    fn run_tempo_3_1_locked_test() {
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<NewtLocked>(
-            newt_config!(3, 1),
+        let slow_paths = run_test::<TempoLocked>(
+            tempo_config!(3, 1),
             SHARD_COUNT,
             workers,
             executors,
@@ -200,13 +200,13 @@ mod tests {
     }
 
     #[test]
-    fn run_real_time_newt_3_1_atomic_test() {
+    fn run_real_time_tempo_3_1_atomic_test() {
         let workers = 3;
         let executors = 3;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(3, 1, clock_bump_interval),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(3, 1, clock_bump_interval),
             SHARD_COUNT,
             workers,
             executors,
@@ -217,11 +217,11 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_5_1_atomic_test() {
+    fn run_tempo_5_1_atomic_test() {
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(5, 1),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(5, 1),
             SHARD_COUNT,
             workers,
             executors,
@@ -232,11 +232,11 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_5_2_atomic_test() {
+    fn run_tempo_5_2_atomic_test() {
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(5, 2),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(5, 2),
             SHARD_COUNT,
             workers,
             executors,
@@ -246,15 +246,15 @@ mod tests {
         assert!(slow_paths > 0);
     }
 
-    // ---- newt (partial replication) tests ---- //
+    // ---- tempo (partial replication) tests ---- //
     #[test]
-    fn run_newt_3_1_atomic_partial_replication_two_shards_test() {
+    fn run_tempo_3_1_atomic_partial_replication_two_shards_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(3, 1),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(3, 1),
             shard_count,
             workers,
             executors,
@@ -265,13 +265,13 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_3_1_atomic_partial_replication_three_shards_test() {
+    fn run_tempo_3_1_atomic_partial_replication_three_shards_test() {
         let shard_count = 3;
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(3, 1),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(3, 1),
             shard_count,
             workers,
             executors,
@@ -282,13 +282,13 @@ mod tests {
     }
 
     #[test]
-    fn run_newt_5_2_atomic_partial_replication_two_shards_test() {
+    fn run_tempo_5_2_atomic_partial_replication_two_shards_test() {
         let shard_count = 2;
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<NewtAtomic>(
-            newt_config!(5, 2),
+        let slow_paths = run_test::<TempoAtomic>(
+            tempo_config!(5, 2),
             shard_count,
             workers,
             executors,
@@ -354,7 +354,7 @@ mod tests {
         let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
-            newt_config!(3, 1),
+            tempo_config!(3, 1),
             shard_count,
             workers,
             executors,
@@ -371,7 +371,7 @@ mod tests {
         let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
-            newt_config!(3, 1),
+            tempo_config!(3, 1),
             shard_count,
             workers,
             executors,
@@ -388,7 +388,7 @@ mod tests {
         let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let slow_paths = run_test::<AtlasLocked>(
-            newt_config!(5, 2),
+            tempo_config!(5, 2),
             shard_count,
             workers,
             executors,

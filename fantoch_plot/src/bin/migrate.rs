@@ -188,13 +188,13 @@ fn main() -> Result<(), Report> {
                     );
                     config.set_gc_interval(previous.config.gc_interval);
                     config.set_leader(previous.config.leader);
-                    config.set_newt_tiny_quorums(
+                    config.set_tempo_tiny_quorums(
                         previous.config.newt_tiny_quorums,
                     );
-                    config.set_newt_clock_bump_interval(
+                    config.set_tempo_clock_bump_interval(
                         previous.config.newt_clock_bump_interval,
                     );
-                    config.set_newt_detached_send_interval(
+                    config.set_tempo_detached_send_interval(
                         previous.config.newt_detached_send_interval,
                     );
                     config.set_caesar_wait_condition(

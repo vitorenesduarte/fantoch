@@ -366,7 +366,7 @@ fn parse_args() -> (usize, usize, usize, usize, bool) {
     let matches = App::new("sequencer_bench")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
-        .about("Benchmark timestamp-assignment in newt")
+        .about("Benchmark timestamp-assignment in tempo")
         .arg(
             Arg::with_name("keys")
                 .long("keys")

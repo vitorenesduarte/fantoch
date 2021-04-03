@@ -8,7 +8,7 @@ use fantoch::protocol::{Protocol, ProtocolMetrics, ProtocolMetricsKind};
 use fantoch::sim::Runner;
 use fantoch::HashMap;
 use fantoch_ps::protocol::{
-    AtlasSequential, CaesarLocked, EPaxosSequential, FPaxos, NewtSequential,
+    AtlasSequential, CaesarLocked, EPaxosSequential, FPaxos, TempoSequential,
 };
 use rayon::prelude::*;
 use std::time::Duration;
@@ -21,12 +21,12 @@ const STACK_SIZE: usize = 64 * 1024 * 1024; // 64mb
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr, $wait_condition:expr) => {{
         let mut config = Config::new($n, $f);
-        config.set_newt_tiny_quorums($tiny_quorums);
+        config.set_tempo_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
-            config.set_newt_clock_bump_interval::<Option<Duration>>(interval);
+            config.set_tempo_clock_bump_interval::<Option<Duration>>(interval);
         }
         // make sure detached votes are sent
-        config.set_newt_detached_send_interval(Duration::from_millis(5));
+        config.set_tempo_detached_send_interval(Duration::from_millis(5));
 
         // set caesar's wait condition
         config.set_caesar_wait_condition($wait_condition);
@@ -57,7 +57,7 @@ fn main() {
         .unwrap();
 
     let aws = true;
-    newt(aws);
+    tempo(aws);
     // fairest_leader();
 }
 
@@ -158,7 +158,7 @@ fn gcp_planet() -> (Planet, Vec<Region>) {
 }
 
 #[allow(dead_code)]
-fn newt(aws: bool) {
+fn tempo(aws: bool) {
     let (planet, regions) = if aws { aws_planet() } else { gcp_planet() };
     println!("{}", planet.distance_matrix(regions.clone()).unwrap());
 
@@ -189,7 +189,7 @@ fn newt(aws: bool) {
                 ("Atlas", config!(n, 1, false, None, false, false)),
                 // ("EPaxos", config!(n, 1, false, None, false, false)),
                 // ("FPaxos", config!(n, 1, false, None, false, false)),
-                ("Newt", config!(n, 1, false, None, false, false)),
+                ("Tempo", config!(n, 1, false, None, false, false)),
             ]
         } else if n == 5 {
             vec![
@@ -200,8 +200,8 @@ fn newt(aws: bool) {
                 // ("EPaxos", config!(n, 0, false, None, false, false)),
                 // ("FPaxos", config!(n, 1, false, None, false, false)),
                 // ("FPaxos", config!(n, 2, false, None, false, false)),
-                // ("Newt", config!(n, 1, false, None, false, false)),
-                // ("Newt", config!(n, 2, false, None, false, false)),
+                // ("Tempo", config!(n, 1, false, None, false, false)),
+                // ("Tempo", config!(n, 2, false, None, false, false)),
                 // ("Caesar", config!(n, 2, false, None, false, false)),
                 ("Caesar", config!(n, 2, false, None, false, true)),
             ]
@@ -271,7 +271,7 @@ fn newt(aws: bool) {
                                 client_regions,
                                 planet,
                             ),
-                            "Newt" => run::<NewtSequential>(
+                            "Tempo" => run::<TempoSequential>(
                                 config,
                                 workload,
                                 clients,
