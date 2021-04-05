@@ -169,6 +169,11 @@ pub fn set_global_style() -> Result<(), Report> {
     let kwargs = pydict!(py, ("fontsize", 10));
     lib.rc("legend", Some(kwargs))?;
 
+    // adjust font type to type 1
+    let kwargs = pydict!(py, ("fonttype", 42));
+    lib.rc("pdf", Some(kwargs))?;
+    lib.rc("ps", Some(kwargs))?;
+
     // adjust axes linewidth
     let kwargs = pydict!(py, ("linewidth", 1));
     lib.rc("axes", Some(kwargs))?;
@@ -1529,7 +1534,7 @@ where
         let ylabel = styles
             .remove(&Style::Label)
             .unwrap_or_else(|| PlotFmt::label(search.protocol, search.f));
-            ylabels.push(ylabel);
+        ylabels.push(ylabel);
     }
 
     // list of colormaps: https://matplotlib.org/tutorials/colors/colormaps.html
@@ -1731,10 +1736,10 @@ pub fn process_metrics_table(
         "deps size",
         // TEMPO/EPAXOS:
         "command key count",
-        // ATLAS/EPAXOS/JANUS:
-        // "chains",
-        // "out",
-        // "in",
+        /* ATLAS/EPAXOS/JANUS:
+         * "chains",
+         * "out",
+         * "in", */
     ];
     let col_labels = col_labels.into_iter().map(String::from).collect();
     let col_widths = vec![0.09, 0.09, 0.07, 0.10, 0.27, 0.23, 0.23];

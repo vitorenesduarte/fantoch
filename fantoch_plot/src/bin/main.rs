@@ -779,9 +779,10 @@ fn partial_replication_all() -> Result<(), Report> {
     let search_refine = |search: &mut Search, read_only_percentage: usize| {
         match search.protocol {
             Protocol::TempoAtomic => {
-                // if tempo atomic, don't filter by read-only percentage as reads
-                // are not treated in any special way there, and thus, it does
-                // not affect the results
+                // if tempo atomic, don't filter by read-only percentage as
+                // reads are not treated in any special way
+                // there, and thus, it does not affect the
+                // results
             }
             Protocol::AtlasLocked | Protocol::TempoLocked => {
                 search.read_only_percentage(read_only_percentage);

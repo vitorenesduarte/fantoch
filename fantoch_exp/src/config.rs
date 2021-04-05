@@ -37,8 +37,8 @@ const PROCESS_TCP_FLUSH_INTERVAL: Option<Duration> =
 // - in AWS 10000 is not enough; setting it to 100k
 // - in Apollo with 32k clients per site, 100k is not enough at the fpaxos
 //   leader; setting it to 1M
-// - in Apollo with 16k clients per site, 1M is not enough with tempo; setting it
-//   to 100M (since 10M is also not enough)
+// - in Apollo with 16k clients per site, 1M is not enough with tempo; setting
+//   it to 100M (since 10M is also not enough)
 const PROCESS_CHANNEL_BUFFER_SIZE: usize = 100_000_000;
 const CLIENT_CHANNEL_BUFFER_SIZE: usize = 10_000;
 
