@@ -18,6 +18,7 @@
 - this specification can then be used for
   - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU and network bandwidth are assumed)
   - __running__ the protocols in a real setting
+  - __model checking__ _(coming soon)_
 - this is achieved by providing a __"simulator"__ and a __"runner"__ that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
 
 For more information, consult our paper [Efficient Replication via Timestamp Stability (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/).
