@@ -23,7 +23,7 @@
 
 `fantoch` is also capable of generating plots like the following one:
 
-<img src="plot.png" width="300">
+<img src="plot.png" width="600">
 
 For more information, consult our paper [Efficient Replication via Timestamp Stability (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/).
 
