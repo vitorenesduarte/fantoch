@@ -8,7 +8,6 @@ license = "MIT/Apache-2.0"
 
 [features]
 jemalloc = ["jemallocator"]
-amortize = ["fantoch/amortize"]
 parallel-sim = ["rayon"]
 max_level_debug = ["fantoch/max_level_debug"]
 max_level_trace = ["fantoch/max_level_trace"]
