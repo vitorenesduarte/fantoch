@@ -83,17 +83,9 @@ pub use hash_map::HashMap;
 pub use hash_set::HashSet;
 
 pub mod hash_map {
-    #[cfg(feature = "amortize")]
-    pub use griddle::hash_map::*;
-
-    #[cfg(not(feature = "amortize"))]
     pub use hashbrown::hash_map::*;
 }
 
 pub mod hash_set {
-    #[cfg(feature = "amortize")]
-    pub use griddle::hash_set::*;
-
-    #[cfg(not(feature = "amortize"))]
     pub use hashbrown::hash_set::*;
 }

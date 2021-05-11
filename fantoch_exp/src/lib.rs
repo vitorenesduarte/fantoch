@@ -73,7 +73,6 @@ impl RunMode {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum FantochFeature {
     Jemalloc,
-    Amortize,
     MaxLevelDebug,
     MaxLevelTrace,
 }
@@ -82,7 +81,6 @@ impl FantochFeature {
     pub fn name(&self) -> String {
         match self {
             Self::Jemalloc => "jemalloc",
-            Self::Amortize => "amortize",
             Self::MaxLevelDebug => "max_level_debug",
             Self::MaxLevelTrace => "max_level_trace",
         }
