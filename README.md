@@ -17,8 +17,13 @@
 - all protocols implement the [`Protocol`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/protocol/mod.rs) trait
 - this specification can then be used for
   - __simulating__ the expected latency in a given geo-distributed scenario (infinite CPU and network bandwidth are assumed)
-  - __running__ the protocols in a real setting
+  - __running__ the protocols in a real setting (e.g. baremetal, AWS, Azure)
+  - __model checking__ _(coming soon)_
 - this is achieved by providing a __"simulator"__ and a __"runner"__ that are protocol-agnostic and are only aware of the `Protocol` (and [`Executor`](https://github.com/vitorenesduarte/fantoch/blob/master/fantoch/src/executor/mod.rs)) trait
+
+`fantoch` is also capable of generating plots like the following one:
+
+<img src="plot.png" width="500">
 
 For more information, consult our paper [Efficient Replication via Timestamp Stability (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/).
 
