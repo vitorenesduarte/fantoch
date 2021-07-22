@@ -34,9 +34,37 @@ impl Dependency {
     }
 }
 
+pub type LatestDep = Option<Dependency>;
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct LatestRWDep {
+    read: LatestDep,
+    write: LatestDep,
+}
+
+pub fn maybe_add_deps(
+    read_only: bool,
+    deps_nfr: bool,
+    latest_rw: &LatestRWDep,
+    deps: &mut HashSet<Dependency>,
+) {
+    // independently of whether the command is read-only or not, all commands
+    // depend on writes
+    if let Some(wdep) = latest_rw.write.as_ref() {
+        deps.insert(wdep.clone());
+    }
+
+    // if the command is not read-only, and the NFR optimization is not then the
+    // command should also depend on the latest read
+    if !read_only && !deps_nfr {
+        if let Some(rdep) = latest_rw.read.as_ref() {
+            deps.insert(rdep.clone());
+        }
+    }
+}
+
 pub trait KeyDeps: Debug + Clone {
     /// Create a new `KeyDeps` instance.
-    fn new(shard_id: ShardId) -> Self;
+    fn new(shard_id: ShardId, deps_nfr: bool) -> Self;
 
     /// Sets the command's `Dot` as the latest command on each key touched by
     /// the command, returning the set of local conflicting commands
@@ -98,7 +126,8 @@ mod tests {
     fn key_deps_flow<KD: KeyDeps>() {
         // create key deps
         let shard_id = 0;
-        let mut key_deps = KD::new(shard_id);
+        let deps_nfr = false;
+        let mut key_deps = KD::new(shard_id, deps_nfr);
 
         // create dot gen
         let process_id = 1;
@@ -355,7 +384,8 @@ mod tests {
     ) {
         // create key deps
         let shard_id = 0;
-        let key_deps = KD::new(shard_id);
+        let deps_nfr = false;
+        let key_deps = KD::new(shard_id, deps_nfr);
 
         // spawn workers
         let handles: Vec<_> = (1..=nthreads)

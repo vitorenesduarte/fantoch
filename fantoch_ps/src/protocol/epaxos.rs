@@ -56,7 +56,7 @@ impl<KD: KeyDeps> Protocol for EPaxos<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_deps = KD::new(shard_id);
+        let key_deps = KD::new(shard_id, config.deps_nfr());
         let f = Self::allowed_faults(config.n());
         let cmds = SequentialCommandsInfo::new(
             process_id,

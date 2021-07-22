@@ -58,7 +58,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_deps = KD::new(shard_id);
+        let key_deps = KD::new(shard_id, config.deps_nfr());
         let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
