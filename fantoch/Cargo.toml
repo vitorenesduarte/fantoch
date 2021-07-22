@@ -9,30 +9,28 @@ license = "MIT/Apache-2.0"
 [features]
 default = ["run"]
 run = ["tokio", "tokio-util"]
-amortize = ["griddle"]
 max_level_debug = []
 max_level_trace = []
 
 [dependencies]
-ahash = "0.6.2"
-bincode = "1.3.1"
-bytes = "1.0.0"
-color-eyre = "0.5.10"
-dashmap = "4.0.0"
-flate2 = "1.0.19"
-futures = { version = "0.3.8", default-features = false, features = ["alloc"] }
-griddle = { version = "0.4.1", features = ["serde"], optional = true }
-hashbrown = { version = "0.9.1", features = ["serde", "ahash"] }
+ahash = "0.7.4"
+bincode = "1.3.3"
+bytes = "1.0.1"
+color-eyre = "0.5.11"
+dashmap = "4.0.2"
+flate2 = "1.0.20"
+futures = { version = "0.3.15", default-features = false, features = ["alloc"] }
+hashbrown = { version = "0.11.2", features = ["serde", "ahash"] }
 parking_lot = "0.11.1"
 num_cpus = "1.13.0"
-rand = "0.8.0"
-serde = { version = "1.0.118", features = ["derive", "rc"] }
+rand = "0.8.4"
+serde = { version = "1.0.126", features = ["derive", "rc"] }
 threshold = "0.9.1"
-tokio = { version = "1.0.2", features = ["full", "parking_lot"], optional = true }
-tokio-util = { version = "0.6.0", features = ["codec"], optional = true }
-tracing = "0.1.22"
-tracing-appender = "0.1.1"
-tracing-subscriber = "0.2.15"
+tokio = { version = "1.9.0", features = ["full", "parking_lot"], optional = true }
+tokio-util = { version = "0.6.7", features = ["codec"], optional = true }
+tracing = "0.1.26"
+tracing-appender = "0.1.2"
+tracing-subscriber = "0.2.19"
 zipf = "7.0.0"
 
 [dev-dependencies]
