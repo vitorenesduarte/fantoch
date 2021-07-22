@@ -112,11 +112,22 @@ mod tests {
     #[test]
     fn sequential_key_deps() {
         key_deps_flow::<SequentialKeyDeps>();
+        read_deps::<SequentialKeyDeps>(false);
+        read_deps::<SequentialKeyDeps>(true);
     }
 
     #[test]
     fn locked_key_deps() {
         key_deps_flow::<LockedKeyDeps>();
+        read_deps::<LockedKeyDeps>(false);
+        read_deps::<LockedKeyDeps>(true);
+    }
+
+    fn get(rifl: Rifl, key: String) -> Command {
+        Command::from(
+            rifl,
+            vec![key].into_iter().map(|key| (key.clone(), KVOp::Get)),
+        )
     }
 
     fn multi_put(rifl: Rifl, keys: Vec<String>, value: String) -> Command {
@@ -359,6 +370,110 @@ mod tests {
         assert_eq!(key_deps.cmd_deps(&cmd_ab), deps_1_8_and_1_6_and_1_9);
         assert_eq!(key_deps.cmd_deps(&cmd_c), deps_1_8_and_1_7);
         assert_eq!(key_deps.noop_deps(), deps_1_8_and_1_6_and_1_7_and_1_9);
+    }
+
+    fn read_deps<KD: KeyDeps>(deps_nfr: bool) {
+        // create key deps
+        let shard_id = 0;
+        let mut key_deps = KD::new(shard_id, deps_nfr);
+
+        // create dot gen
+        let process_id = 1;
+        let mut dot_gen = DotGen::new(process_id);
+
+        // keys
+        let key = String::from("A");
+        let value = String::from("");
+
+        // read
+        let read_rifl = Rifl::new(100, 1); // client 100, 1st op
+        let read = get(read_rifl, key.clone());
+
+        // write
+        let write_rifl = Rifl::new(101, 1); // client 101, 1st op
+        let write = multi_put(write_rifl, vec![key.clone()], value);
+
+        // 1. empty conf for read
+        // 2. empty conf for write
+        let conf = key_deps.cmd_deps(&read);
+        assert_eq!(conf, HashSet::new());
+        let conf = key_deps.cmd_deps(&write);
+        assert_eq!(conf, HashSet::new());
+
+        // add read with {1,1}
+        key_deps.add_cmd(dot_gen.next_id(), &read, None);
+
+        // 1. empty conf for read
+        // 2. (NFR=true)  empty conf for write
+        // 2. (NFR=false) conf with {1,1} for write
+        let deps_1_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
+        assert_eq!(key_deps.cmd_deps(&read), HashSet::new());
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), HashSet::new());
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_1);
+        }
+
+        // add read with {1,2}
+        key_deps.add_cmd(dot_gen.next_id(), &read, None);
+
+        // 1. empty conf for read
+        // 2. (NFR=true)  empty conf for write
+        // 2. (NFR=false) conf with {1,2} for write
+        let deps_1_2 = HashSet::from_iter(vec![Dot::new(1, 2)]);
+        assert_eq!(key_deps.cmd_deps(&read), HashSet::new());
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), HashSet::new());
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_2);
+        }
+
+        // add write with {1,3}
+        key_deps.add_cmd(dot_gen.next_id(), &write, None);
+
+        // 1. conf with {1,3} for read
+        // 2. (NFR=true)  conf with {1,3} for write
+        // 2. (NFR=false) conf with {1,2}|{1,3} for write
+        let deps_1_3 = HashSet::from_iter(vec![Dot::new(1, 3)]);
+        let deps_1_2_and_1_3 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
+        assert_eq!(key_deps.cmd_deps(&read), deps_1_3);
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_3);
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_2_and_1_3);
+        }
+
+        // add write with {1,4}
+        key_deps.add_cmd(dot_gen.next_id(), &write, None);
+
+        // 1. conf with {1,4} for read
+        // 2. (NFR=true)  conf with {1,4} for write
+        // 2. (NFR=false) conf with {1,2}|{1,4} for write
+        let deps_1_4 = HashSet::from_iter(vec![Dot::new(1, 4)]);
+        let deps_1_2_and_1_4 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 4)]);
+        assert_eq!(key_deps.cmd_deps(&read), deps_1_4);
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_4);
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_2_and_1_4);
+        }
+
+        // add read with {1,5}
+        key_deps.add_cmd(dot_gen.next_id(), &read, None);
+
+        // 1. conf with {1,4} for read
+        // 2. (NFR=true)  conf with {1,4} for write
+        // 2. (NFR=false) conf with {1,4}|{1,5} for write
+        let deps_1_4_and_1_5 =
+            HashSet::from_iter(vec![Dot::new(1, 4), Dot::new(1, 5)]);
+        assert_eq!(key_deps.cmd_deps(&read), deps_1_4);
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_4);
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_4_and_1_5);
+        }
     }
 
     #[test]
