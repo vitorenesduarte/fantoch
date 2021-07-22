@@ -50,7 +50,7 @@ const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "master";
+const BRANCH: &str = "main";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
