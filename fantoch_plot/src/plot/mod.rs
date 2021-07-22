@@ -57,7 +57,7 @@ impl<'p> Matplotlib<'p> {
         name: &str,
         kwargs: Option<&PyDict>,
     ) -> Result<(), Report> {
-        pytry!(self.lib.py(), self.lib.call("rc", (name,), kwargs));
+        pytry!(self.lib.py(), self.lib.getattr("rc")?.call((name,), kwargs));
         Ok(())
     }
 }

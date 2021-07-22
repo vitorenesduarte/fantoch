@@ -29,7 +29,9 @@ impl<'p> PyPlot<'p> {
     {
         let result = pytry!(
             self.py(),
-            self.plt.call("subplot", (nrows, ncols, index), kwargs)
+            self.plt
+                .getattr("subplot")?
+                .call((nrows, ncols, index), kwargs)
         );
         let ax = Axes::new(result)?;
         Ok(ax)
@@ -52,7 +54,8 @@ impl<'p> PyPlot<'p> {
                 "nrows shouldn't be set here; use `PyPlot::subplot` instead"
             );
         }
-        let result = pytry!(self.py(), self.plt.call("subplots", (), kwargs));
+        let result =
+            pytry!(self.py(), self.plt.getattr("subplots")?.call((), kwargs));
         let tuple = pytry!(self.py(), result.downcast::<PyTuple>());
         let fig = Figure::new(tuple.get_item(0));
         let ax = Axes::new(tuple.get_item(1))?;
@@ -63,18 +66,22 @@ impl<'p> PyPlot<'p> {
         &self,
         kwargs: Option<&PyDict>,
     ) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call("subplots_adjust", (), kwargs));
+        pytry!(
+            self.py(),
+            self.plt.getattr("subplots_adjust")?.call((), kwargs)
+        );
         Ok(())
     }
 
     pub fn table(&self, kwargs: Option<&PyDict>) -> Result<Table<'_>, Report> {
-        let result = pytry!(self.py(), self.plt.call("table", (), kwargs));
+        let result =
+            pytry!(self.py(), self.plt.getattr("table")?.call((), kwargs));
         let table = Table::new(result);
         Ok(table)
     }
 
     pub fn axis(&self, option: &str) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call1("axis", (option,)));
+        pytry!(self.py(), self.plt.getattr("axis")?.call1((option,)));
         Ok(())
     }
 
@@ -85,7 +92,10 @@ impl<'p> PyPlot<'p> {
         text: &str,
         kwargs: Option<&PyDict>,
     ) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call("text", (x, y, text), kwargs));
+        pytry!(
+            self.py(),
+            self.plt.getattr("text")?.call((x, y, text), kwargs)
+        );
         Ok(())
     }
 
@@ -94,17 +104,20 @@ impl<'p> PyPlot<'p> {
         path: &str,
         kwargs: Option<&PyDict>,
     ) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call("savefig", (path,), kwargs));
+        pytry!(
+            self.py(),
+            self.plt.getattr("savefig")?.call((path,), kwargs)
+        );
         Ok(())
     }
 
     pub fn close(&self, kwargs: Option<&PyDict>) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call("close", (), kwargs));
+        pytry!(self.py(), self.plt.getattr("close")?.call((), kwargs));
         Ok(())
     }
 
     pub fn tight_layout(&self) -> Result<(), Report> {
-        pytry!(self.py(), self.plt.call0("tight_layout"));
+        pytry!(self.py(), self.plt.getattr("tight_layout")?.call0());
         Ok(())
     }
 
