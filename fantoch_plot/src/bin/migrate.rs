@@ -65,7 +65,7 @@ pub struct PreviousConfig {
     executor_monitor_execution_order: bool,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
-    // starting leader process
+    /// starting leader process
     leader: Option<ProcessId>,
     /// defines whether dependency-based protocols (atlas & epaxos) should
     /// employ the NFR optimization
