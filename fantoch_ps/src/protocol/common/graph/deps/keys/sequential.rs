@@ -105,14 +105,11 @@ impl SequentialKeyDeps {
                 latest_rw.read = Some(cmd_dep.clone());
             } else {
                 // otherwise, add it as the latest write
-                // if a command is not read-only, then it should depend on the
-                // latest read and latest write, and it should be added as the
-                // latest write
                 latest_rw.write = Some(cmd_dep.clone());
             }
         });
 
-        // include latest noop, if any
+        // always include latest noop, if any
         self.maybe_add_noop_latest(&mut deps);
 
         // and finally return the computed deps

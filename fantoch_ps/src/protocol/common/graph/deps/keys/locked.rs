@@ -103,9 +103,6 @@ impl LockedKeyDeps {
                 guard.read = Some(cmd_dep.clone());
             } else {
                 // otherwise, add it as the latest write
-                // if a command is not read-only, then it should depend on the
-                // latest read and latest write, and it should be added as the
-                // latest write
                 guard.write = Some(cmd_dep.clone());
             }
         });

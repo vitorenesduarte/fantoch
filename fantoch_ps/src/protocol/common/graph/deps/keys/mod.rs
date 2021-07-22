@@ -53,8 +53,12 @@ pub fn maybe_add_deps(
         deps.insert(wdep.clone());
     }
 
-    // if the command is not read-only, and the NFR optimization is not then the
-    // command should also depend on the latest read
+    // if the command is not read-only, and the NFR optimization is not enabled,
+    // then the command should also depend on the latest read;
+    // in other words:
+    // - reads never depend on reads, and
+    // - writes always depend on reads (unless NFR is enabled, in which case,
+    //   they don't)
     if !read_only && !deps_nfr {
         if let Some(rdep) = latest_rw.read.as_ref() {
             deps.insert(rdep.clone());
