@@ -26,8 +26,11 @@ pub struct Config {
     executor_monitor_execution_order: bool,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
-    // starting leader process
+    /// starting leader process
     leader: Option<ProcessId>,
+    /// defines whether dependency-based protocols (atlas & epaxos) should
+    /// employ the NFR optimization
+    deps_nfr: bool,
     /// defines whether tempo should employ tiny quorums or not
     tempo_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
@@ -67,6 +70,8 @@ impl Config {
         let gc_interval = None;
         // by default, there's no leader
         let leader = None;
+        // by default, `deps_nfr = false`
+        let deps_nfr = false;
         // by default, `tempo_tiny_quorums = false`
         let tempo_tiny_quorums = false;
         // by default, clocks are not bumped periodically
@@ -88,6 +93,7 @@ impl Config {
             executor_monitor_execution_order,
             gc_interval,
             leader,
+            deps_nfr,
             tempo_tiny_quorums,
             tempo_clock_bump_interval,
             tempo_detached_send_interval,
@@ -201,6 +207,16 @@ impl Config {
         L: Into<Option<ProcessId>>,
     {
         self.leader = leader.into();
+    }
+
+    /// Checks whether deps NFR is enabled or not.
+    pub fn deps_nfr(&self) -> bool {
+        self.deps_nfr
+    }
+
+    /// Changes the value of `deps_nfr`.
+    pub fn set_deps_nfr(&mut self, deps_nfr: bool) {
+        self.deps_nfr = deps_nfr;
     }
 
     /// Checks whether tempo tiny quorums is enabled or not.
@@ -409,6 +425,17 @@ mod tests {
         let leader = 1;
         config.set_leader(leader);
         assert_eq!(config.leader(), Some(leader));
+
+        // by default, deps NFR is false
+        assert!(!config.deps_nfr());
+
+        // if we change it to false, remains false
+        config.set_deps_nfr(false);
+        assert!(!config.deps_nfr());
+
+        // if we change it to true, it becomes true
+        config.set_deps_nfr(true);
+        assert!(config.deps_nfr());
 
         // by default, tempo tiny quorums is false
         assert!(!config.tempo_tiny_quorums());

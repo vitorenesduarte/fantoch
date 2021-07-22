@@ -65,8 +65,11 @@ pub struct PreviousConfig {
     executor_monitor_execution_order: bool,
     /// defines the interval between garbage collections
     gc_interval: Option<Duration>,
-    // starting leader process
+    /// starting leader process
     leader: Option<ProcessId>,
+    /// defines whether dependency-based protocols (atlas & epaxos) should
+    /// employ the NFR optimization
+    deps_nfr: bool,
     /// defines whether tempo should employ tiny quorums or not
     tempo_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
@@ -186,6 +189,7 @@ fn main() -> Result<(), Report> {
                     );
                     config.set_gc_interval(previous.config.gc_interval);
                     config.set_leader(previous.config.leader);
+                    config.set_deps_nfr(previous.config.deps_nfr);
                     config.set_tempo_tiny_quorums(
                         previous.config.tempo_tiny_quorums,
                     );

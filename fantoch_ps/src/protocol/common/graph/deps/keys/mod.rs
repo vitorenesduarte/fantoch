@@ -34,9 +34,41 @@ impl Dependency {
     }
 }
 
+pub type LatestDep = Option<Dependency>;
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct LatestRWDep {
+    read: LatestDep,
+    write: LatestDep,
+}
+
+pub fn maybe_add_deps(
+    read_only: bool,
+    deps_nfr: bool,
+    latest_rw: &LatestRWDep,
+    deps: &mut HashSet<Dependency>,
+) {
+    // independently of whether the command is read-only or not, all commands
+    // depend on writes
+    if let Some(wdep) = latest_rw.write.as_ref() {
+        deps.insert(wdep.clone());
+    }
+
+    // if the command is not read-only, and the NFR optimization is not enabled,
+    // then the command should also depend on the latest read;
+    // in other words:
+    // - reads never depend on reads, and
+    // - writes always depend on reads (unless NFR is enabled, in which case,
+    //   they don't)
+    if !read_only && !deps_nfr {
+        if let Some(rdep) = latest_rw.read.as_ref() {
+            deps.insert(rdep.clone());
+        }
+    }
+}
+
 pub trait KeyDeps: Debug + Clone {
     /// Create a new `KeyDeps` instance.
-    fn new(shard_id: ShardId) -> Self;
+    fn new(shard_id: ShardId, deps_nfr: bool) -> Self;
 
     /// Sets the command's `Dot` as the latest command on each key touched by
     /// the command, returning the set of local conflicting commands
@@ -80,11 +112,22 @@ mod tests {
     #[test]
     fn sequential_key_deps() {
         key_deps_flow::<SequentialKeyDeps>();
+        read_deps::<SequentialKeyDeps>(false);
+        read_deps::<SequentialKeyDeps>(true);
     }
 
     #[test]
     fn locked_key_deps() {
         key_deps_flow::<LockedKeyDeps>();
+        read_deps::<LockedKeyDeps>(false);
+        read_deps::<LockedKeyDeps>(true);
+    }
+
+    fn get(rifl: Rifl, key: String) -> Command {
+        Command::from(
+            rifl,
+            vec![key].into_iter().map(|key| (key.clone(), KVOp::Get)),
+        )
     }
 
     fn multi_put(rifl: Rifl, keys: Vec<String>, value: String) -> Command {
@@ -98,7 +141,8 @@ mod tests {
     fn key_deps_flow<KD: KeyDeps>() {
         // create key deps
         let shard_id = 0;
-        let mut key_deps = KD::new(shard_id);
+        let deps_nfr = false;
+        let mut key_deps = KD::new(shard_id, deps_nfr);
 
         // create dot gen
         let process_id = 1;
@@ -328,6 +372,110 @@ mod tests {
         assert_eq!(key_deps.noop_deps(), deps_1_8_and_1_6_and_1_7_and_1_9);
     }
 
+    fn read_deps<KD: KeyDeps>(deps_nfr: bool) {
+        // create key deps
+        let shard_id = 0;
+        let mut key_deps = KD::new(shard_id, deps_nfr);
+
+        // create dot gen
+        let process_id = 1;
+        let mut dot_gen = DotGen::new(process_id);
+
+        // keys
+        let key = String::from("A");
+        let value = String::from("");
+
+        // read
+        let read_rifl = Rifl::new(100, 1); // client 100, 1st op
+        let read = get(read_rifl, key.clone());
+
+        // write
+        let write_rifl = Rifl::new(101, 1); // client 101, 1st op
+        let write = multi_put(write_rifl, vec![key.clone()], value);
+
+        // 1. empty conf for read
+        // 2. empty conf for write
+        let conf = key_deps.cmd_deps(&read);
+        assert_eq!(conf, HashSet::new());
+        let conf = key_deps.cmd_deps(&write);
+        assert_eq!(conf, HashSet::new());
+
+        // add read with {1,1}
+        key_deps.add_cmd(dot_gen.next_id(), &read, None);
+
+        // 1. empty conf for read
+        // 2. (NFR=true)  empty conf for write
+        // 2. (NFR=false) conf with {1,1} for write
+        let deps_1_1 = HashSet::from_iter(vec![Dot::new(1, 1)]);
+        assert_eq!(key_deps.cmd_deps(&read), HashSet::new());
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), HashSet::new());
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_1);
+        }
+
+        // add read with {1,2}
+        key_deps.add_cmd(dot_gen.next_id(), &read, None);
+
+        // 1. empty conf for read
+        // 2. (NFR=true)  empty conf for write
+        // 2. (NFR=false) conf with {1,2} for write
+        let deps_1_2 = HashSet::from_iter(vec![Dot::new(1, 2)]);
+        assert_eq!(key_deps.cmd_deps(&read), HashSet::new());
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), HashSet::new());
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_2);
+        }
+
+        // add write with {1,3}
+        key_deps.add_cmd(dot_gen.next_id(), &write, None);
+
+        // 1. conf with {1,3} for read
+        // 2. (NFR=true)  conf with {1,3} for write
+        // 2. (NFR=false) conf with {1,2}|{1,3} for write
+        let deps_1_3 = HashSet::from_iter(vec![Dot::new(1, 3)]);
+        let deps_1_2_and_1_3 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 3)]);
+        assert_eq!(key_deps.cmd_deps(&read), deps_1_3);
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_3);
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_2_and_1_3);
+        }
+
+        // add write with {1,4}
+        key_deps.add_cmd(dot_gen.next_id(), &write, None);
+
+        // 1. conf with {1,4} for read
+        // 2. (NFR=true)  conf with {1,4} for write
+        // 2. (NFR=false) conf with {1,2}|{1,4} for write
+        let deps_1_4 = HashSet::from_iter(vec![Dot::new(1, 4)]);
+        let deps_1_2_and_1_4 =
+            HashSet::from_iter(vec![Dot::new(1, 2), Dot::new(1, 4)]);
+        assert_eq!(key_deps.cmd_deps(&read), deps_1_4);
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_4);
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_2_and_1_4);
+        }
+
+        // add read with {1,5}
+        key_deps.add_cmd(dot_gen.next_id(), &read, None);
+
+        // 1. conf with {1,4} for read
+        // 2. (NFR=true)  conf with {1,4} for write
+        // 2. (NFR=false) conf with {1,4}|{1,5} for write
+        let deps_1_4_and_1_5 =
+            HashSet::from_iter(vec![Dot::new(1, 4), Dot::new(1, 5)]);
+        assert_eq!(key_deps.cmd_deps(&read), deps_1_4);
+        if deps_nfr {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_4);
+        } else {
+            assert_eq!(key_deps.cmd_deps(&write), deps_1_4_and_1_5);
+        }
+    }
+
     #[test]
     fn concurrent_locked_test() {
         let nthreads = 2;
@@ -355,7 +503,8 @@ mod tests {
     ) {
         // create key deps
         let shard_id = 0;
-        let key_deps = KD::new(shard_id);
+        let deps_nfr = false;
+        let key_deps = KD::new(shard_id, deps_nfr);
 
         // spawn workers
         let handles: Vec<_> = (1..=nthreads)

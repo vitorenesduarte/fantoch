@@ -61,7 +61,8 @@ impl KeyClocks for LockedKeyClocks {
         if cmd.read_only() {
             // if the command is read-only, the simply read the current clock
             // value
-            // TODO: add the read as pending
+            // TODO: reads have to be processed differently as this violates
+            //       linearizability
             let mut clock = min_clock;
             for (_key, key_lock) in &locks {
                 let guard = key_lock.lock();

@@ -23,18 +23,17 @@ jobs:
         env:
           QUICKCHECK_TESTS: '10000'
           RUSTFLAGS: '-Zinstrument-coverage'
+          LLVM_PROFILE_FILE: '%p-%m.profraw'
         timeout-minutes: 60
 
       - name: Install grcov
         run: |
           rustup component add llvm-tools-preview
-          # curl -L https://github.com/mozilla/grcov/releases/latest/download/grcov-linux-x86_64.tar.bz2 | tar jxf -
-          curl https://raw.githubusercontent.com/vitorenesduarte/grcov/subfolder_same_as_root_bin/grcov --output grcov
-          chmod u+x grcov
+          curl -L https://github.com/mozilla/grcov/releases/download/v0.8.0/grcov-linux-x86_64.tar.bz2 | tar jxf -
 
       - name: Run grcov
         run: |
-          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
+          ./grcov . --source-dir . --binary-path ./target/debug/ --output-type lcov --output-path ./lcov.info --branch --ignore-not-existing --ignore "/* fantoch_ps/src/bin/* fantoch_bote/src/main.rs fantoch_exp/* fantoch_plot/*"
 
       - name: Upload to Codecov
         run: |
