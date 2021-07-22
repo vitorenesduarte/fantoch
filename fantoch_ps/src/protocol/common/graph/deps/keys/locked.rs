@@ -89,6 +89,9 @@ impl LockedKeyDeps {
         // create cmd dep
         let cmd_dep = Dependency::from_cmd(dot, cmd);
 
+        // flag indicating whether the command is read-only
+        let read_only = cmd.read_only();
+
         // iterate through all command keys, grab a write lock, get their
         // current latest and set ourselves to be the new latest
         cmd.keys(self.shard_id).for_each(|key| {
@@ -97,7 +100,7 @@ impl LockedKeyDeps {
             // grab a write lock
             let mut guard = entry.write();
 
-            if cmd.read_only() {
+            if read_only {
                 // if a command is read-only, then it should depend on the
                 // latest write, and it should be added as the latest read
                 if let Some(wdep) = guard.write.as_ref() {

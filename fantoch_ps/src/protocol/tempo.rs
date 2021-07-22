@@ -23,6 +23,9 @@ use threshold::VClock;
 
 pub type TempoSequential = Tempo<SequentialKeyClocks>;
 pub type TempoAtomic = Tempo<AtomicKeyClocks>;
+// TODO: `TempoLocked` is just an (incorrect) experiment that tries to handle
+//       read commands differently than writes (while `TempoAtomic` treats all
+//       commands in the same way)
 pub type TempoLocked = Tempo<LockedKeyClocks>;
 
 #[derive(Debug, Clone)]
