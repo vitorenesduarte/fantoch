@@ -83,13 +83,23 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
 
 macro_rules! config {
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
+        config!(
+            $n,
+            $f,
+            $tiny_quorums,
+            $clock_bump_interval,
+            $skip_fast_ack,
+            EXECUTE_AT_COMMIT
+        )
+    }};
+    ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr, $execute_at_commit:expr) => {{
         let mut config = Config::new($n, $f);
         config.set_tempo_tiny_quorums($tiny_quorums);
         if let Some(interval) = $clock_bump_interval {
             config.set_tempo_clock_bump_interval::<Option<Duration>>(interval);
         }
         config.set_skip_fast_ack($skip_fast_ack);
-        config.set_execute_at_commit(EXECUTE_AT_COMMIT);
+        config.set_execute_at_commit($execute_at_commit);
         config.set_executor_cleanup_interval(EXECUTOR_CLEANUP_INTERVAL);
         if let Some(interval) = EXECUTOR_MONITOR_PENDING_INTERVAL {
             config.set_executor_monitor_pending_interval(interval);
@@ -456,6 +466,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
     ];
     let n = regions.len();
 
+    let caesar_execute_at_commit = true;
     let mut configs = vec![
         // (protocol, (n, f, tiny quorums, clock bump interval, skip fast ack))
         // (Protocol::Basic, config!(n, 1, false, None, false)),
@@ -466,7 +477,10 @@ async fn increasing_load_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, config!(n, 1, false, None, false)),
         (Protocol::AtlasLocked, config!(n, 2, false, None, false)),
         // (Protocol::EPaxosLocked, config!(n, 2, false, None, false)),
-        (Protocol::CaesarLocked, config!(n, 2, false, None, false)),
+        (
+            Protocol::CaesarLocked,
+            config!(n, 2, false, None, false, caesar_execute_at_commit),
+        ),
     ];
 
     let clients_per_region = vec![
