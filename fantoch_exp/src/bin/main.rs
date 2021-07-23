@@ -111,11 +111,135 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    fast_path_plot().await
     // fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
     // batching_plot().await
-    increasing_sites_plot().await
+    // increasing_sites_plot().await
     // partial_replication_plot().await
+}
+
+#[allow(dead_code)]
+async fn fast_path_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_fast_path";
+
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
+        Region::ApEast1,
+        Region::UsEast1,
+    ];
+    let ns = vec![5, 7];
+
+    let clients_per_region = vec![1];
+    let batch_max_sizes = vec![1];
+
+    let shard_count = 1;
+    let keys_per_command = 1;
+    let payload_size = 100;
+    let cpus = 12;
+
+    let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
+    let key_gens: Vec<_> = conflict_rates
+        .into_iter()
+        .map(|conflict_rate| KeyGen::ConflictPool {
+            conflict_rate,
+            pool_size: 1,
+        })
+        .collect();
+
+    // normally we do 500, but this experiment is really long...
+    let commands_per_client_wan = 100;
+
+    let mut workloads = Vec::new();
+    for key_gen in key_gens {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            commands_per_client_wan,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
+
+    let skip = |_, _, _| false;
+
+    // pair of protocol and whether it provides configurable fault-tolerance
+    let protocols = vec![
+        (Protocol::TempoAtomic, true),
+        (Protocol::AtlasLocked, true),
+        (Protocol::EPaxosLocked, false),
+    ];
+
+    let mut all_configs = Vec::new();
+    for n in ns {
+        // take the first n regions
+        let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
+        assert_eq!(regions.len(), n);
+
+        // create configs
+        let mut configs = Vec::new();
+        for (protocol, configurable_f) in protocols.clone() {
+            let minority = n / 2;
+            if configurable_f {
+                for f in 1..=minority {
+                    configs.push((protocol, n, f));
+                }
+            } else {
+                configs.push((protocol, n, minority));
+            }
+        }
+        println!("n = {}", n);
+        println!("{:#?}", configs);
+
+        let mut configs: Vec<_> = configs
+            .into_iter()
+            .map(|(protocol, n, f)| {
+                (protocol, config!(n, f, false, None, false))
+            })
+            .collect();
+
+        // set shards in each config
+        configs.iter_mut().for_each(|(_protocol, config)| {
+            config.set_shard_count(shard_count)
+        });
+
+        all_configs.push((configs, regions));
+    }
+
+    let total_config_count: usize =
+        all_configs.iter().map(|(configs, _)| configs.len()).sum();
+    let progress = TracingProgressBar::init(
+        (workloads.len()
+            * clients_per_region.len()
+            * total_config_count
+            * batch_max_sizes.len()) as u64,
+    );
+
+    for (configs, regions) in all_configs {
+        // create AWS planet
+        let planet = Some(Planet::from(LATENCY_AWS));
+        baremetal_bench(
+            regions,
+            shard_count,
+            planet,
+            configs,
+            clients_per_region.clone(),
+            workloads.clone(),
+            batch_max_sizes.clone(),
+            cpus,
+            skip,
+            &progress,
+            results_dir,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
