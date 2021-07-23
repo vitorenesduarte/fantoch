@@ -56,7 +56,7 @@ pub async fn bench_experiment(
     skip: impl Fn(Protocol, Config, usize) -> bool,
     experiment_timeouts: ExperimentTimeouts,
     protocols_to_cleanup: Vec<Protocol>,
-    progress: TracingProgressBar,
+    progress: &TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     match testbed {

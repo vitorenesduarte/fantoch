@@ -2,7 +2,6 @@ use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
-use fantoch::info;
 use fantoch::planet::Planet;
 use fantoch_exp::bench::ExperimentTimeouts;
 use fantoch_exp::machine::Machines;
@@ -170,6 +169,7 @@ async fn increasing_sites_plot() -> Result<(), Report> {
         (Protocol::CaesarLocked, false),
     ];
 
+    let mut all_configs = Vec::new();
     for n in ns {
         // take the first n regions
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
@@ -177,39 +177,47 @@ async fn increasing_sites_plot() -> Result<(), Report> {
 
         // create configs
         let mut configs = Vec::new();
-
         for (protocol, configurable_f) in protocols.clone() {
             if configurable_f {
                 let max_f = if n == 3 { 1 } else { 2 };
                 for f in 1..=max_f {
-                    configs.push((protocol, config!(n, f, false, None, false)));
+                    configs.push((protocol, n, f));
                 }
             } else {
                 let minority = n / 2;
-                configs
-                    .push((protocol, config!(n, minority, false, None, false)));
+                configs.push((protocol, n, minority));
             }
         }
-        info!("n = {:?}", n);
-        info!("{:?}", configs);
+        println!("n = {:?}", n);
+        println!("{:#?}", configs);
+
+        let mut configs: Vec<_> = configs
+            .into_iter()
+            .map(|(protocol, n, f)| {
+                (protocol, config!(n, f, false, None, false))
+            })
+            .collect();
 
         // set shards in each config
         configs.iter_mut().for_each(|(_protocol, config)| {
             config.set_shard_count(shard_count)
         });
 
-        // init logging
-        // TODO: this progress bar is per n, not overall
-        let progress = TracingProgressBar::init(
-            (workloads.len()
-                * clients_per_region.len()
-                * configs.len()
-                * batch_max_sizes.len()) as u64,
-        );
+        all_configs.push((configs, regions));
+    }
 
+    let total_config_count: usize =
+        all_configs.iter().map(|(configs, _)| configs.len()).sum();
+    let progress = TracingProgressBar::init(
+        (workloads.len()
+            * clients_per_region.len()
+            * total_config_count
+            * batch_max_sizes.len()) as u64,
+    );
+
+    for (configs, regions) in all_configs {
         // create AWS planet
         let planet = Some(Planet::from(LATENCY_AWS));
-
         baremetal_bench(
             regions,
             shard_count,
@@ -220,7 +228,7 @@ async fn increasing_sites_plot() -> Result<(), Report> {
             batch_max_sizes.clone(),
             cpus,
             skip,
-            progress,
+            &progress,
             results_dir,
         )
         .await?;
@@ -334,7 +342,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         batch_max_sizes,
         cpus,
         skip,
-        progress,
+        &progress,
         results_dir,
     )
     .await
@@ -428,7 +436,7 @@ async fn batching_plot() -> Result<(), Report> {
         batch_max_sizes,
         cpus,
         skip,
-        progress.clone(),
+        &progress,
         results_dir,
     )
     .await?;
@@ -534,7 +542,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         batch_max_sizes,
         cpus,
         skip,
-        progress,
+        &progress,
         results_dir,
     )
     .await
@@ -836,7 +844,7 @@ async fn whatever_plot() -> Result<(), Report> {
         batch_max_sizes,
         cpus,
         skip,
-        progress,
+        &progress,
         results_dir,
     )
     .await
@@ -904,7 +912,7 @@ where
         batch_max_sizes,
         cpus,
         skip,
-        progress,
+        &progress,
         results_dir,
     )
     .await
@@ -924,7 +932,7 @@ async fn baremetal_bench(
     batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: TracingProgressBar,
+    progress: &TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report>
 where
@@ -1052,7 +1060,7 @@ async fn do_aws_bench(
         batch_max_sizes,
         cpus,
         skip,
-        progress,
+        &progress,
         results_dir,
     )
     .await
@@ -1071,7 +1079,7 @@ async fn run_bench(
     batch_max_sizes: Vec<usize>,
     cpus: usize,
     skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: TracingProgressBar,
+    progress: &TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     fantoch_exp::bench::bench_experiment(
