@@ -2,6 +2,7 @@ use color_eyre::eyre::WrapErr;
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
 use fantoch::config::Config;
+use fantoch::info;
 use fantoch::planet::Planet;
 use fantoch_exp::bench::ExperimentTimeouts;
 use fantoch_exp::machine::Machines;
@@ -104,10 +105,127 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
+    increasing_sites_plot().await
     // fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
     // batching_plot().await
-    partial_replication_plot().await
+    // partial_replication_plot().await
+}
+
+#[allow(dead_code)]
+async fn increasing_sites_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_increasing_sites";
+
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
+        Region::ApEast1,
+        Region::UsEast1,
+        Region::ApNortheast1,
+        Region::EuNorth1,
+        Region::ApSouth1,
+        Region::UsWest2,
+        /* Region::EuWest2,
+         * Region::UsEast2, */
+    ];
+    let ns = vec![3, 5, 7, 9, 11];
+
+    let clients_per_region = vec![256];
+    let batch_max_sizes = vec![1];
+
+    let shard_count = 1;
+    let keys_per_command = 1;
+    let payload_size = 100;
+    let cpus = 12;
+
+    let key_gens = vec![KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    }];
+
+    let mut workloads = Vec::new();
+    for key_gen in key_gens {
+        let workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT_WAN,
+            payload_size,
+        );
+        workloads.push(workload);
+    }
+
+    let skip = |_, _, _| false;
+
+    // pair of protocol and whether it provides configurable fault-tolerance
+    let protocols = vec![
+        (Protocol::TempoAtomic, true),
+        (Protocol::FPaxos, true),
+        (Protocol::AtlasLocked, true),
+        (Protocol::EPaxosLocked, false),
+        (Protocol::CaesarLocked, false),
+    ];
+
+    for n in ns {
+        // take the first n regions
+        let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
+        assert_eq!(regions.len(), n);
+
+        // create configs
+        let mut configs = Vec::new();
+
+        for (protocol, configurable_f) in protocols.clone() {
+            if configurable_f {
+                let max_f = if n == 3 { 1 } else { 2 };
+                for f in 1..=max_f {
+                    configs.push((protocol, config!(n, f, false, None, false)));
+                }
+            } else {
+                let minority = n / 2;
+                configs
+                    .push((protocol, config!(n, minority, false, None, false)));
+            }
+        }
+        info!("n = {:?}", n);
+        info!("{:?}", configs);
+
+        // set shards in each config
+        configs.iter_mut().for_each(|(_protocol, config)| {
+            config.set_shard_count(shard_count)
+        });
+
+        // init logging
+        // TODO: this progress bar is per n, not overall
+        let progress = TracingProgressBar::init(
+            (workloads.len()
+                * clients_per_region.len()
+                * configs.len()
+                * batch_max_sizes.len()) as u64,
+        );
+
+        // create AWS planet
+        let planet = Some(Planet::from(LATENCY_AWS));
+
+        baremetal_bench(
+            regions,
+            shard_count,
+            planet,
+            configs,
+            clients_per_region.clone(),
+            workloads.clone(),
+            batch_max_sizes.clone(),
+            cpus,
+            skip,
+            progress,
+            results_dir,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
