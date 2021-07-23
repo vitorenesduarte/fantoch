@@ -129,12 +129,7 @@ impl PlotFmt {
         .to_string()
     }
 
-    pub fn linewidth(f: usize) -> String {
-        match f {
-            1 => 1.6,
-            2 => 1.6,
-            _ => panic!("PlotFmt::linewidth: f = {} not supported!", f),
-        }
-        .to_string()
+    pub fn linewidth(_f: usize) -> String {
+        "1.6".to_string()
     }
 }

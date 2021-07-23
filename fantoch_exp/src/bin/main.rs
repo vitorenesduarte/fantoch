@@ -70,15 +70,12 @@ const RUN_MODE: RunMode = RunMode::Release;
 
 // list of protocol binaries to cleanup before running the experiment
 const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
+    // Protocol::Basic,
     Protocol::TempoAtomic,
-    /*
-    Protocol::Basic,
     Protocol::AtlasLocked,
     Protocol::EPaxosLocked,
-    Protocol::CaesarLocked,
     Protocol::FPaxos,
     Protocol::CaesarLocked,
-    */
 ];
 
 macro_rules! config {
@@ -114,10 +111,10 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    increasing_sites_plot().await
     // fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
     // batching_plot().await
+    increasing_sites_plot().await
     // partial_replication_plot().await
 }
 
