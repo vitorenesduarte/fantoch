@@ -188,8 +188,6 @@ async fn increasing_sites_plot() -> Result<(), Report> {
                 configs.push((protocol, n, minority));
             }
         }
-        println!("n = {:?}", n);
-        println!("{:#?}", configs);
 
         let mut configs: Vec<_> = configs
             .into_iter()
