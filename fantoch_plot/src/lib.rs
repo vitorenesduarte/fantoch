@@ -196,7 +196,7 @@ pub fn increasing_sites_plot(
     db: &ResultsDB,
 ) -> Result<(), Report> {
     const FULL_REGION_WIDTH: f64 = 10f64;
-    const MAX_COMBINATIONS: usize = 8;
+    const MAX_COMBINATIONS: usize = 7;
     // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
     const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
 
@@ -211,8 +211,8 @@ pub fn increasing_sites_plot(
         .collect();
 
     // we need to shift all to the left by half of the number of combinations
-    let search_count = protocols.len();
-    let shift_left = search_count as f64 / 2f64;
+    let protocol_count = protocols.len();
+    let shift_left = protocol_count as f64 / 2f64;
     // we also need to shift half bar to the right
     let shift_right = 0.5;
     let protocols =
@@ -220,10 +220,10 @@ pub fn increasing_sites_plot(
             // compute index according to shifts
             let mut base = index as f64 - shift_left + shift_right;
 
-            // HACK to separate move `f = 1` (i.e. the first 3 searches) a bit to
-            // the left and `f = 2` (i.e. the remaining 5 searches) a bit to the
-            // right
-            if search_count == 8 {
+            // HACK to separate move `f = 1` (i.e. the first 3 searches) a bit
+            // to the left and `f = 2` (i.e. the remaining 4
+            // searches) a bit to the right
+            if protocol_count == 7 {
                 if index < 3 {
                     base += 0.25;
                 } else {
@@ -283,6 +283,9 @@ pub fn increasing_sites_plot(
                         PlotFmt::protocol_name(search.protocol),
                         search.f
                     );
+                    y.push(0);
+                    from_err.push(0);
+                    to_err.push(0);
                     continue;
                 }
                 1 => (),
@@ -350,8 +353,7 @@ pub fn increasing_sites_plot(
     ax.set_xticks(x, None)?;
 
     // create labels with the number of sites
-    let labels: Vec<_> =
-        ns.into_iter().map(|n| format!("r = {}", n)).collect();
+    let labels: Vec<_> = ns.into_iter().map(|n| format!("r = {}", n)).collect();
     ax.set_xticklabels(labels, None)?;
 
     // set labels
@@ -360,8 +362,11 @@ pub fn increasing_sites_plot(
 
     // legend
     // HACK:
-    let legend_column_spacing =
-        if search_count == 7 { Some(1.25) } else { None };
+    let legend_column_spacing = if protocol_count == 7 {
+        Some(1.25)
+    } else {
+        None
+    };
     let x_bbox_to_anchor = Some(0.46);
     add_legend(
         plotted,

@@ -173,7 +173,6 @@ async fn increasing_sites_plot() -> Result<(), Report> {
         (Protocol::FPaxos, true),
         (Protocol::AtlasLocked, true),
         (Protocol::EPaxosLocked, false),
-        (Protocol::CaesarLocked, false),
     ];
 
     let mut all_configs = Vec::new();

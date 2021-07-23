@@ -60,9 +60,8 @@ fn increasing_sites_plot() -> Result<(), Report> {
         (Protocol::AtlasLocked, Some(2)),
         (Protocol::FPaxos, Some(2)),
         (Protocol::EPaxosLocked, None),
-        (Protocol::CaesarLocked, None),
     ];
-    let legend_order = vec![0, 2, 4, 1, 3, 5, 6, 7];
+    let legend_order = vec![0, 2, 4, 1, 3, 5, 6];
     let ns = vec![3, 5, 7, 9, 11];
     let clients_per_region = 256;
     let error_bar = ErrorBar::Without;
@@ -1392,12 +1391,10 @@ fn single_key_all() -> Result<(), Report> {
     let results_dir = "../results_increasing_sites";
     // fixed parameters
     let shard_count = 1;
-    let key_gens = vec![
-        KeyGen::ConflictPool {
-            conflict_rate: 2,
-            pool_size: 1,
-        },
-    ];
+    let key_gens = vec![KeyGen::ConflictPool {
+        conflict_rate: 2,
+        pool_size: 1,
+    }];
     let batch_max_sizes = vec![1];
     let payload_sizes = vec![100];
     let protocols = vec![
