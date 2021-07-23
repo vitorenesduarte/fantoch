@@ -182,7 +182,6 @@ pub async fn bench_experiment(
             }
         }
     }
-    progress.finish();
     Ok(())
 }
 

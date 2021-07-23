@@ -18,7 +18,7 @@ impl TracingProgressBar {
         tracing_subscriber::fmt()
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
             // redirect all tracing logs to self; this makes sure that there's a
-            // single progress bar that, and not once scattered, in between
+            // single progress bar that, and not one scattered, in between
             // tracing logs
             .with_writer(progress.clone())
             .init();
@@ -28,10 +28,6 @@ impl TracingProgressBar {
 
     pub fn inc(&self) {
         self.progress.inc(1);
-    }
-
-    pub fn finish(&self) {
-        self.progress.finish();
     }
 }
 
