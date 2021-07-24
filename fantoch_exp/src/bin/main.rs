@@ -152,16 +152,13 @@ async fn fast_path_plot() -> Result<(), Report> {
         })
         .collect();
 
-    // normally we do 500, but this experiment is really long...
-    let commands_per_client_wan = 100;
-
     let mut workloads = Vec::new();
     for key_gen in key_gens {
         let workload = Workload::new(
             shard_count,
             key_gen,
             keys_per_command,
-            commands_per_client_wan,
+            COMMANDS_PER_CLIENT_WAN,
             payload_size,
         );
         workloads.push(workload);
@@ -185,9 +182,10 @@ async fn fast_path_plot() -> Result<(), Report> {
         // create configs
         let mut configs = Vec::new();
         for (protocol, configurable_f) in protocols.clone() {
+            let start_f = 2;
             let minority = n / 2;
             if configurable_f {
-                for f in 1..=minority {
+                for f in start_f..=minority {
                     configs.push((protocol, n, f));
                 }
             } else {
