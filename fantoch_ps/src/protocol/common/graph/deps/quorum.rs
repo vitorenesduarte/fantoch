@@ -8,7 +8,8 @@ pub struct QuorumDeps {
     fast_quorum_size: usize,
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
-    // mapping from dep to the number of times it is reported by the fast quorum
+    // mapping from dep to the number of times it is reported by the fast
+    // quorum
     threshold_deps: HashMap<Dependency, usize>,
 }
 

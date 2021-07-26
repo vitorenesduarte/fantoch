@@ -26,7 +26,8 @@ impl TracingProgressBar {
         progress
     }
 
-    pub fn inc(&self) {
+    pub fn inc(&mut self) {
+        // NOTE: this function doesn't have to be &mut self
         self.progress.inc(1);
     }
 }

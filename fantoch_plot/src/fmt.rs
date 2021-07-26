@@ -42,6 +42,7 @@ impl PlotFmt {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "#27ae60",
             (Protocol::AtlasLocked, 2) => "#16a085",
+            (Protocol::AtlasLocked, 3) => "#2980b9", // "#111111"
             // (Protocol::EPaxosLocked, _) => "#227093",
             (Protocol::EPaxosLocked, _) => "#444444",
             (Protocol::CaesarLocked, _) => "#bdc3c7",
@@ -49,8 +50,7 @@ impl PlotFmt {
             (Protocol::FPaxos, 2) => "#34495e",
             (Protocol::TempoAtomic, 1) => "#f1c40f",
             (Protocol::TempoAtomic, 2) => "#e67e22",
-            (Protocol::TempoLocked, 1) => "#2980b9", // "#111111"
-            (Protocol::TempoLocked, 2) => "#c23616", // "#333333"
+            (Protocol::TempoAtomic, 3) => "#c23616", // "#333333"
             (Protocol::Basic, _) => "#576574",
             _ => panic!(
                 "PlotFmt::color: protocol = {:?} and f = {} combination not supported!",
@@ -98,16 +98,14 @@ impl PlotFmt {
         match (protocol, f) {
             (Protocol::AtlasLocked, 1) => "o",
             (Protocol::AtlasLocked, 2) => "s",
+            (Protocol::AtlasLocked, 3) => "P",
             (Protocol::EPaxosLocked, _) => "D",
             (Protocol::CaesarLocked, _) => "H",
             (Protocol::FPaxos, 1) => "+",
             (Protocol::FPaxos, 2) => "x",
             (Protocol::TempoAtomic, 1) => "v",
             (Protocol::TempoAtomic, 2) => "^",
-            (Protocol::TempoLocked, 1) => "o",
-            (Protocol::TempoLocked, 2) => "s",
-            (Protocol::Basic, 1) => "p",
-            (Protocol::Basic, 2) => "P",
+            (Protocol::TempoAtomic, 3) => "p",
             _ => panic!(
                 "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
                 protocol, f

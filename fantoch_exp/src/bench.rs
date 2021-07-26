@@ -53,10 +53,10 @@ pub async fn bench_experiment(
     batch_max_sizes: Vec<usize>,
     batch_max_delay: Duration,
     cpus: usize,
-    skip: impl Fn(Protocol, Config, usize) -> bool,
+    skip: &mut impl FnMut(Protocol, Config, usize) -> bool,
     experiment_timeouts: ExperimentTimeouts,
     protocols_to_cleanup: Vec<Protocol>,
-    progress: &TracingProgressBar,
+    progress: &mut TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     match testbed {

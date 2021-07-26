@@ -135,7 +135,7 @@ async fn fast_path_plot() -> Result<(), Report> {
     ];
     let ns = vec![5, 7];
 
-    let clients_per_region = vec![1];
+    let clients_per_region = vec![1, 64, 256, 1024];
     let batch_max_sizes = vec![1];
 
     let shard_count = 1;
@@ -164,7 +164,15 @@ async fn fast_path_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |_, _, _| false;
+    let mut experiments_to_skip = 48;
+    let mut skip = |_, _, _| {
+        if experiments_to_skip == 0 {
+            false
+        } else {
+            experiments_to_skip -= 1;
+            true
+        }
+    };
 
     // pair of protocol and whether it provides configurable fault-tolerance
     let protocols = vec![
@@ -212,7 +220,7 @@ async fn fast_path_plot() -> Result<(), Report> {
 
     let total_config_count: usize =
         all_configs.iter().map(|(configs, _)| configs.len()).sum();
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * total_config_count
@@ -231,8 +239,8 @@ async fn fast_path_plot() -> Result<(), Report> {
             workloads.clone(),
             batch_max_sizes.clone(),
             cpus,
-            skip,
-            &progress,
+            &mut skip,
+            &mut progress,
             results_dir,
         )
         .await?;
@@ -287,7 +295,7 @@ async fn increasing_sites_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |_, _, _| false;
+    let mut skip = |_, _, _| false;
 
     // pair of protocol and whether it provides configurable fault-tolerance
     let protocols = vec![
@@ -334,7 +342,7 @@ async fn increasing_sites_plot() -> Result<(), Report> {
 
     let total_config_count: usize =
         all_configs.iter().map(|(configs, _)| configs.len()).sum();
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * total_config_count
@@ -353,8 +361,8 @@ async fn increasing_sites_plot() -> Result<(), Report> {
             workloads.clone(),
             batch_max_sizes.clone(),
             cpus,
-            skip,
-            &progress,
+            &mut skip,
+            &mut progress,
             results_dir,
         )
         .await?;
@@ -440,7 +448,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
     }
 
     // don't skip
-    let skip = |_, _, _| false;
+    let mut skip = |_, _, _| false;
 
     // set shards in each config
     configs
@@ -448,7 +456,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // init logging
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * configs.len()
@@ -467,8 +475,8 @@ async fn partial_replication_plot() -> Result<(), Report> {
         workloads,
         batch_max_sizes,
         cpus,
-        skip,
-        &progress,
+        &mut skip,
+        &mut progress,
         results_dir,
     )
     .await
@@ -535,7 +543,7 @@ async fn batching_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |_, _, _| false;
+    let mut skip = |_, _, _| false;
 
     // set shards in each config
     configs
@@ -543,7 +551,7 @@ async fn batching_plot() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // init logging
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * configs.len()
@@ -561,8 +569,8 @@ async fn batching_plot() -> Result<(), Report> {
         workloads.clone(),
         batch_max_sizes,
         cpus,
-        skip,
-        &progress,
+        &mut skip,
+        &mut progress,
         results_dir,
     )
     .await?;
@@ -641,7 +649,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |protocol, _, clients| {
+    let mut skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
         protocol == Protocol::AtlasLocked && clients > 1024 * 20
     };
@@ -652,7 +660,7 @@ async fn increasing_load_plot() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // init logging
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * configs.len()
@@ -671,8 +679,8 @@ async fn increasing_load_plot() -> Result<(), Report> {
         workloads,
         batch_max_sizes,
         cpus,
-        skip,
-        &progress,
+        &mut skip,
+        &mut progress,
         results_dir,
     )
     .await
@@ -728,7 +736,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |protocol, _, clients| {
+    let mut skip = |protocol, _, clients| {
         // only run FPaxos with 512 clients
         protocol == Protocol::FPaxos && clients != 512
     };
@@ -739,7 +747,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // init logging
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * configs.len()
@@ -759,8 +767,8 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
         workloads,
         batch_max_sizes,
         cpus,
-        skip,
-        progress,
+        &mut skip,
+        &mut progress,
         results_dir,
     )
     .await
@@ -842,7 +850,7 @@ async fn whatever_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let skip = |protocol, _, clients| {
+    let mut skip = |protocol, _, clients| {
         // skip Atlas with more than 4096 clients
         protocol == Protocol::AtlasLocked && clients > 1024 * 20
     };
@@ -953,7 +961,7 @@ async fn whatever_plot() -> Result<(), Report> {
         .for_each(|(_protocol, config)| config.set_shard_count(shard_count));
 
     // init logging
-    let progress = TracingProgressBar::init(
+    let mut progress = TracingProgressBar::init(
         (workloads.len()
             * clients_per_region.len()
             * configs.len()
@@ -973,8 +981,8 @@ async fn whatever_plot() -> Result<(), Report> {
         workloads,
         batch_max_sizes,
         cpus,
-        skip,
-        &progress,
+        &mut skip,
+        &mut progress,
         results_dir,
     )
     .await
@@ -1014,8 +1022,8 @@ async fn local_bench(
     workloads: Vec<Workload>,
     batch_max_sizes: Vec<usize>,
     cpus: usize,
-    skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: TracingProgressBar,
+    skip: &mut impl Fn(Protocol, Config, usize) -> bool,
+    progress: &mut TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report>
 where
@@ -1042,7 +1050,7 @@ where
         batch_max_sizes,
         cpus,
         skip,
-        &progress,
+        progress,
         results_dir,
     )
     .await
@@ -1061,8 +1069,8 @@ async fn baremetal_bench(
     workloads: Vec<Workload>,
     batch_max_sizes: Vec<usize>,
     cpus: usize,
-    skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: &TracingProgressBar,
+    skip: &mut impl FnMut(Protocol, Config, usize) -> bool,
+    progress: &mut TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report>
 where
@@ -1114,8 +1122,8 @@ async fn aws_bench(
     workloads: Vec<Workload>,
     batch_max_sizes: Vec<usize>,
     cpus: usize,
-    skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: TracingProgressBar,
+    skip: &mut impl Fn(Protocol, Config, usize) -> bool,
+    progress: &mut TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     let mut launcher: tsunami::providers::aws::Launcher<_> = Default::default();
@@ -1156,8 +1164,8 @@ async fn do_aws_bench(
     workloads: Vec<Workload>,
     batch_max_sizes: Vec<usize>,
     cpus: usize,
-    skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: TracingProgressBar,
+    skip: &mut impl Fn(Protocol, Config, usize) -> bool,
+    progress: &mut TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     // setup aws machines
@@ -1190,7 +1198,7 @@ async fn do_aws_bench(
         batch_max_sizes,
         cpus,
         skip,
-        &progress,
+        progress,
         results_dir,
     )
     .await
@@ -1208,8 +1216,8 @@ async fn run_bench(
     workloads: Vec<Workload>,
     batch_max_sizes: Vec<usize>,
     cpus: usize,
-    skip: impl Fn(Protocol, Config, usize) -> bool,
-    progress: &TracingProgressBar,
+    skip: &mut impl FnMut(Protocol, Config, usize) -> bool,
+    progress: &mut TracingProgressBar,
     results_dir: impl AsRef<Path>,
 ) -> Result<(), Report> {
     fantoch_exp::bench::bench_experiment(
