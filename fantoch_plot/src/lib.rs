@@ -181,6 +181,93 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
+pub fn fast_path_plot<F>(
+    searches: Vec<Search>,
+    clients_per_region: usize,
+    conflict_rates: Vec<usize>,
+    search_refine: F,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, usize, usize),
+{
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    for mut search in searches {
+        let mut fast_path_ratios = Vec::new();
+
+        for conflict_rate in conflict_rates.clone() {
+            search_refine(&mut search, clients_per_region, conflict_rate);
+
+            let mut exp_data = db.find(search)?;
+            match exp_data.len() {
+                0 => {
+                    eprintln!(
+                        "missing data for {} f = {}",
+                        PlotFmt::protocol_name(search.protocol),
+                        search.f
+                    );
+                    fast_path_ratios.push(-1);
+                    continue;
+                }
+                1 => (),
+                _ => {
+                    let matches: Vec<_> = exp_data
+                        .into_iter()
+                        .map(|(timestamp, _, _)| {
+                            timestamp.path().display().to_string()
+                        })
+                        .collect();
+                    panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
+                }
+            };
+            let (_, _, exp_data) = exp_data.pop().unwrap();
+
+            let (_, _, fast_path_ratio) =
+                exp_data.global_protocol_metrics.fast_path_data();
+            fast_path_ratios.push(fast_path_ratio as i64);
+        }
+
+        // plot it! (if there's something to be plotted)
+        if !fast_path_ratios.is_empty() {
+            let kwargs = line_style(py, search, &None)?;
+            ax.plot(conflict_rates.clone(), fast_path_ratios, None, Some(kwargs))?;
+            plotted += 1;
+        }
+    }
+
+    // set x limits
+    let kwargs = pydict!(py, ("xmin", 0), ("xmax", 100));
+    ax.set_xlim(Some(kwargs))?;
+
+    // set y limits
+    let kwargs = pydict!(py, ("ymin", 0), ("ymax", 100));
+    ax.set_ylim(Some(kwargs))?;
+
+    // set labels
+    ax.set_xlabel("conflict (%)", None)?;
+    ax.set_ylabel("fast path (%)", None)?;
+
+    // legend
+    add_legend(plotted, None, None, None, None, py, &ax)?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
 pub fn increasing_sites_plot(
     ns: Vec<usize>,
     protocols: Vec<(Protocol, Option<usize>)>,
@@ -1998,15 +2085,7 @@ pub fn process_metrics_table(
         };
 
         // fetch all cell data
-        let fast_path = protocol_metrics
-            .get_aggregated(ProtocolMetricsKind::FastPath)
-            .cloned()
-            .unwrap_or_default();
-        let slow_path = protocol_metrics
-            .get_aggregated(ProtocolMetricsKind::SlowPath)
-            .cloned()
-            .unwrap_or_default();
-        let fp_rate = (fast_path * 100) as f64 / (fast_path + slow_path) as f64;
+        let (fast_path, slow_path, fp_rate) = protocol_metrics.fast_path_data();
         let fast_path = Some(fmt(fast_path));
         let slow_path = Some(fmt(slow_path));
         let fp_rate = Some(format!("{:.1}", fp_rate));

@@ -27,25 +27,100 @@ fn main() -> Result<(), Report> {
     // multi_key()?;
     // single_key_all()?;
     show_distance_matrix();
-    eurosys()?;
+    thesis()?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn thesis() -> Result<(), Report> {
+    // eurosys()?;
+    fast_path_plot()?;
+    // increasing_sites_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    // fairness_plot()?;
-    // tail_latency_plot()?;
-    // increasing_load_plot()?;
-    // batching_plot()?;
-    increasing_sites_plot()?;
-    // partial_replication_plot()?;
+    fairness_plot()?;
+    tail_latency_plot()?;
+    increasing_load_plot()?;
+    batching_plot()?;
+    partial_replication_plot()?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn fast_path_plot() -> Result<(), Report> {
+    println!(">>>>>>>> FAST PATH <<<<<<<<");
+    let results_dir = "../results_fast_path";
+    // fixed parameters
+    let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
+    let payload_size = 100;
+    let batch_max_size = 1;
+    let clients_per_region = vec![1, 16];
+
+    let search_refine = |search: &mut Search,
+                         clients_per_region: usize,
+                         conflict_rate: usize| {
+        let key_gen = KeyGen::ConflictPool {
+            conflict_rate,
+            pool_size: 1,
+        };
+        search
+            .clients_per_region(clients_per_region)
+            .key_gen(key_gen)
+            .payload_size(payload_size)
+            .batch_max_size(batch_max_size);
+    };
+
+    // tuple with protocol and f
+    let protocols_n5 = vec![
+        (Protocol::TempoAtomic, 2),
+        (Protocol::AtlasLocked, 2),
+        (Protocol::EPaxosLocked, 2),
+    ];
+
+    let protocols_n7 = vec![
+        (Protocol::TempoAtomic, 2),
+        (Protocol::AtlasLocked, 2),
+        (Protocol::TempoAtomic, 3),
+        (Protocol::AtlasLocked, 3),
+        (Protocol::EPaxosLocked, 3),
+    ];
+
+    // load results
+    let db = ResultsDB::load(results_dir).wrap_err("load results")?;
+
+    // generate fast path plots
+    for (n, protocols) in vec![(5, protocols_n5), (7, protocols_n7)] {
+        // create searches
+        let searches: Vec<_> = protocols
+            .into_iter()
+            .map(|(protocol, f)| Search::new(n, f, protocol))
+            .collect();
+
+        for clients_per_region in clients_per_region.clone() {
+            let path = format!("plot_fast_path_n{}_c{}.pdf", n, clients_per_region);
+            fantoch_plot::fast_path_plot(
+                searches.clone(),
+                clients_per_region,
+                conflict_rates.clone(),
+                search_refine,
+                PLOT_DIR,
+                &path,
+                &db,
+            )?;
+        }
+    }
+
     Ok(())
 }
 
 #[allow(dead_code)]
 fn increasing_sites_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING SITES <<<<<<<<");
-    let results_dir = "../results_increasing_sites";
+    let results_dir =
+        "/home/vitor.enes/thesis_results/results_increasing_sites";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -360,9 +435,9 @@ fn increasing_load_plot() -> Result<(), Report> {
     let path = String::from("plot_increasing_load.pdf");
     fantoch_plot::throughput_latency_plot_split(
         n,
-        protocols.clone(),
+        protocols,
         search_gen,
-        clients_per_region.clone(),
+        clients_per_region,
         top_key_gen,
         bottom_key_gen,
         search_refine,
@@ -1388,13 +1463,17 @@ fn multi_key_all() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn single_key_all() -> Result<(), Report> {
-    let results_dir = "../results_increasing_sites";
+    let results_dir = "../results_fast_path";
     // fixed parameters
     let shard_count = 1;
-    let key_gens = vec![KeyGen::ConflictPool {
-        conflict_rate: 2,
-        pool_size: 1,
-    }];
+    let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
+    let key_gens: Vec<_> = conflict_rates
+        .into_iter()
+        .map(|conflict_rate| KeyGen::ConflictPool {
+            conflict_rate,
+            pool_size: 1,
+        })
+        .collect();
     let batch_max_sizes = vec![1];
     let payload_sizes = vec![100];
     let protocols = vec![
@@ -1409,12 +1488,12 @@ fn single_key_all() -> Result<(), Report> {
 
     // generate throughput-latency plot
     let clients_per_region = vec![
-        // 32,
-        // 64,
-        // 128,
+        1,  // 8
+        16, // 32,
+        64, // 128,
         256,
         // 512,
-        // 1024,
+        1024,
         // 1024 * 2,
         // 1024 * 4,
         // 1024 * 6,
@@ -1433,7 +1512,7 @@ fn single_key_all() -> Result<(), Report> {
         // 1024 * 60,
         // 1024 * 64,
     ];
-    let ns = vec![3, 5, 7, 9, 11];
+    let ns = vec![5, 7];
 
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
@@ -1777,6 +1856,12 @@ fn show_distance_matrix() {
         Region::new("ap-southeast-1"),
         Region::new("ca-central-1"),
         Region::new("sa-east-1"),
+        Region::new("ap-east-1"),
+        Region::new("us-east-1"),
+        Region::new("ap-northeast-1"),
+        Region::new("eu-north-1"),
+        Region::new("ap-south-1"),
+        Region::new("us-west-2"),
     ];
     println!("{}", planet.distance_matrix(regions).unwrap());
 }

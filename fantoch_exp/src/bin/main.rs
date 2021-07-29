@@ -135,7 +135,7 @@ async fn fast_path_plot() -> Result<(), Report> {
     ];
     let ns = vec![5, 7];
 
-    let clients_per_region = vec![1, 64, 256, 1024];
+    let clients_per_region = vec![1, 16, 64, 256, 1024];
     let batch_max_sizes = vec![1];
 
     let shard_count = 1;
@@ -164,7 +164,7 @@ async fn fast_path_plot() -> Result<(), Report> {
         workloads.push(workload);
     }
 
-    let mut experiments_to_skip = 48;
+    let mut experiments_to_skip = 0;
     let mut skip = |_, _, _| {
         if experiments_to_skip == 0 {
             false

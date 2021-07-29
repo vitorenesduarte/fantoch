@@ -146,6 +146,23 @@ where
 
 pub type ProtocolMetrics = Metrics<ProtocolMetricsKind>;
 
+impl ProtocolMetrics {
+    /// Returns a tuple containing the number of fast paths, the number of slow
+    /// paths and the percentage of fast paths.
+    pub fn fast_path_data(&self) -> (u64, u64, f64) {
+        let fast_path = self
+            .get_aggregated(ProtocolMetricsKind::FastPath)
+            .cloned()
+            .unwrap_or_default();
+        let slow_path = self
+            .get_aggregated(ProtocolMetricsKind::SlowPath)
+            .cloned()
+            .unwrap_or_default();
+        let fp_rate = (fast_path * 100) as f64 / (fast_path + slow_path) as f64;
+        (fast_path, slow_path, fp_rate)
+    }
+}
+
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolMetricsKind {
     FastPath,
