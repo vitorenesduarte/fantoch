@@ -271,10 +271,6 @@ where
     // set xticks
     ax.set_xticks(conflict_rates, None)?;
 
-    // set yticks, removing label with 100
-    let yticks = vec![0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
-    ax.set_yticks(yticks, None)?;
-
     // set x limits
     let kwargs = pydict!(py, ("xmin", 0), ("xmax", 100));
     ax.set_xlim(Some(kwargs))?;
