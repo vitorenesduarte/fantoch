@@ -88,6 +88,15 @@ fn fast_path_plot() -> Result<(), Report> {
         (Protocol::EPaxosLocked, 3),
     ];
 
+    // change basic to worst case
+    let style_fun = |search: &Search| {
+        let mut style = HashMap::new();
+        if search.protocol == Protocol::Basic {
+            style.insert(Style::Label, "worst-case".to_string());
+        }
+        style
+    };
+
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
@@ -100,12 +109,14 @@ fn fast_path_plot() -> Result<(), Report> {
             .collect();
 
         for clients_per_region in clients_per_region.clone() {
-            let path = format!("plot_fast_path_n{}_c{}.pdf", n, clients_per_region);
+            let path =
+                format!("plot_fast_path_n{}_c{}.pdf", n, clients_per_region);
             fantoch_plot::fast_path_plot(
                 searches.clone(),
                 clients_per_region,
                 conflict_rates.clone(),
                 search_refine,
+                Some(Box::new(style_fun)),
                 PLOT_DIR,
                 &path,
                 &db,

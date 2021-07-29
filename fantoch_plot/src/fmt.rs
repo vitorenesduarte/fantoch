@@ -106,6 +106,7 @@ impl PlotFmt {
             (Protocol::TempoAtomic, 1) => "v",
             (Protocol::TempoAtomic, 2) => "^",
             (Protocol::TempoAtomic, 3) => "p",
+            (Protocol::Basic, _) => ",",
             _ => panic!(
                 "PlotFmt::marker: protocol = {:?} and f = {} combination not supported!",
                 protocol, f
@@ -122,7 +123,7 @@ impl PlotFmt {
             (Protocol::FPaxos, _) => "-.",
             (Protocol::TempoAtomic, _) => "-",
             (Protocol::TempoLocked, _) => "-",
-            (Protocol::Basic, _) => ":",
+            (Protocol::Basic, _) => "-.",
         }
         .to_string()
     }

@@ -186,6 +186,7 @@ pub fn fast_path_plot<F>(
     clients_per_region: usize,
     conflict_rates: Vec<usize>,
     search_refine: F,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -241,11 +242,38 @@ where
 
         // plot it! (if there's something to be plotted)
         if !fast_path_ratios.is_empty() {
-            let kwargs = line_style(py, search, &None)?;
-            ax.plot(conflict_rates.clone(), fast_path_ratios, None, Some(kwargs))?;
+            let kwargs = line_style(py, search, &style_fun)?;
+            ax.plot(
+                conflict_rates.clone(),
+                fast_path_ratios,
+                None,
+                Some(kwargs),
+            )?;
             plotted += 1;
         }
     }
+
+    // add a worst-case line
+    let kwargs =
+        line_style(py, Search::new(3, 1, Protocol::Basic), &style_fun)?;
+    ax.plot(
+        conflict_rates.clone(),
+        conflict_rates
+            .clone()
+            .into_iter()
+            .map(|conflict_rate| 100 - conflict_rate)
+            .collect(),
+        None,
+        Some(kwargs),
+    )?;
+    plotted += 1;
+
+    // set xticks
+    ax.set_xticks(conflict_rates, None)?;
+
+    // set yticks, removing label with 100
+    let yticks = vec![0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
+    ax.set_yticks(yticks, None)?;
 
     // set x limits
     let kwargs = pydict!(py, ("xmin", 0), ("xmax", 100));
