@@ -2,16 +2,15 @@ use super::Dependency;
 use fantoch::id::ProcessId;
 use fantoch::{HashMap, HashSet};
 
-type ThresholdDeps = HashMap<Dependency, usize>;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuorumDeps {
     // fast quorum size
     fast_quorum_size: usize,
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
-    // threshold deps
-    threshold_deps: ThresholdDeps,
+    // mapping from dep to the number of times it is reported by the fast
+    // quorum
+    threshold_deps: HashMap<Dependency, usize>,
 }
 
 impl QuorumDeps {
@@ -20,7 +19,7 @@ impl QuorumDeps {
         Self {
             fast_quorum_size,
             participants: HashSet::with_capacity(fast_quorum_size),
-            threshold_deps: ThresholdDeps::new(),
+            threshold_deps: HashMap::new(),
         }
     }
 

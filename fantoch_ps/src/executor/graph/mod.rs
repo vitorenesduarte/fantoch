@@ -898,7 +898,7 @@ mod tests {
     #[test]
     fn cycle() {
         // config
-        let n = 1;
+        let n = 3;
 
         // dots
         let dot_1 = Dot::new(1, 1);

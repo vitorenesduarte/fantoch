@@ -181,7 +181,320 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
-pub fn latency_plot<R>(
+pub fn fast_path_plot<F>(
+    searches: Vec<Search>,
+    clients_per_region: usize,
+    conflict_rates: Vec<usize>,
+    search_refine: F,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report>
+where
+    F: Fn(&mut Search, usize, usize),
+{
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    for mut search in searches {
+        let mut fast_path_ratios = Vec::new();
+
+        for conflict_rate in conflict_rates.clone() {
+            search_refine(&mut search, clients_per_region, conflict_rate);
+
+            let mut exp_data = db.find(search)?;
+            match exp_data.len() {
+                0 => {
+                    eprintln!(
+                        "missing data for {} f = {}",
+                        PlotFmt::protocol_name(search.protocol),
+                        search.f
+                    );
+                    fast_path_ratios.push(-1);
+                    continue;
+                }
+                1 => (),
+                _ => {
+                    let matches: Vec<_> = exp_data
+                        .into_iter()
+                        .map(|(timestamp, _, _)| {
+                            timestamp.path().display().to_string()
+                        })
+                        .collect();
+                    panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
+                }
+            };
+            let (_, _, exp_data) = exp_data.pop().unwrap();
+
+            let (_, _, fast_path_ratio) =
+                exp_data.global_protocol_metrics.fast_path_data();
+            fast_path_ratios.push(fast_path_ratio as i64);
+        }
+
+        // plot it! (if there's something to be plotted)
+        if !fast_path_ratios.is_empty() {
+            let kwargs = line_style(py, search, &style_fun)?;
+            ax.plot(
+                conflict_rates.clone(),
+                fast_path_ratios,
+                None,
+                Some(kwargs),
+            )?;
+            plotted += 1;
+        }
+    }
+
+    // add a worst-case line
+    let kwargs =
+        line_style(py, Search::new(3, 1, Protocol::Basic), &style_fun)?;
+    ax.plot(
+        conflict_rates.clone(),
+        conflict_rates
+            .clone()
+            .into_iter()
+            .map(|conflict_rate| 100 - conflict_rate)
+            .collect(),
+        None,
+        Some(kwargs),
+    )?;
+    plotted += 1;
+
+    // set xticks
+    ax.set_xticks(conflict_rates, None)?;
+
+    // set x limits
+    let kwargs = pydict!(py, ("xmin", 0), ("xmax", 100));
+    ax.set_xlim(Some(kwargs))?;
+
+    // set y limits
+    let kwargs = pydict!(py, ("ymin", 0), ("ymax", 100));
+    ax.set_ylim(Some(kwargs))?;
+
+    // set labels
+    ax.set_xlabel("conflict (%)", None)?;
+    ax.set_ylabel("fast path (%)", None)?;
+
+    // legend
+    add_legend(plotted, None, None, None, None, py, &ax)?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
+pub fn increasing_sites_plot(
+    ns: Vec<usize>,
+    protocols: Vec<(Protocol, Option<usize>)>,
+    key_gen: KeyGen,
+    clients_per_region: usize,
+    payload_size: usize,
+    legend_order: Option<Vec<usize>>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
+    error_bar: ErrorBar,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report> {
+    const FULL_REGION_WIDTH: f64 = 10f64;
+    const MAX_COMBINATIONS: usize = 7;
+    // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
+    const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
+
+    assert!(
+        protocols.len() <= MAX_COMBINATIONS,
+        "latency_plot: expected less searches than the max number of combinations"
+    );
+
+    // compute x: one per `n`
+    let x: Vec<_> = (0..ns.len())
+        .map(|i| i as f64 * FULL_REGION_WIDTH)
+        .collect();
+
+    // we need to shift all to the left by half of the number of combinations
+    let protocol_count = protocols.len();
+    let shift_left = protocol_count as f64 / 2f64;
+    // we also need to shift half bar to the right
+    let shift_right = 0.5;
+    let protocols =
+        protocols.into_iter().enumerate().map(|(index, protocol)| {
+            // compute index according to shifts
+            let mut base = index as f64 - shift_left + shift_right;
+
+            // HACK to separate move `f = 1` (i.e. the first 3 searches) a bit
+            // to the left and `f = 2` (i.e. the remaining 4
+            // searches) a bit to the right
+            if protocol_count == 7 {
+                if index < 3 {
+                    base += 0.25;
+                } else {
+                    base += 0.75;
+                }
+            }
+            // compute combination's shift
+            let shift = base * BAR_WIDTH;
+            (shift, protocol)
+        });
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    // compute legend order: if not defined, then it's the order given by
+    // `protocols`
+    let legend_order = legend_order
+        .unwrap_or_else(|| (0..protocols.len()).collect::<Vec<_>>());
+    assert_eq!(
+        legend_order.len(),
+        protocols.len(),
+        "legend order should contain the same number of protocols"
+    );
+    let mut legends = BTreeMap::new();
+
+    for ((shift, (protocol, f)), legend_order) in
+        protocols.into_iter().zip(legend_order)
+    {
+        let mut y = Vec::new();
+        let mut from_err = Vec::new();
+        let mut to_err = Vec::new();
+
+        for n in ns.clone() {
+            // set `f` to be a minority in case it's not set
+            let f = f.unwrap_or(n / 2);
+
+            let mut search = Search::new(n, f, protocol);
+            // filter by key gen, clients per region and payload size
+            search
+                .key_gen(key_gen)
+                .clients_per_region(clients_per_region)
+                .payload_size(payload_size);
+
+            let mut exp_data = db.find(search)?;
+            match exp_data.len() {
+                0 => {
+                    eprintln!(
+                        "missing data for {} f = {}",
+                        PlotFmt::protocol_name(search.protocol),
+                        search.f
+                    );
+                    y.push(0);
+                    from_err.push(0);
+                    to_err.push(0);
+                    continue;
+                }
+                1 => (),
+                _ => {
+                    let matches: Vec<_> = exp_data
+                        .into_iter()
+                        .map(|(timestamp, _, _)| {
+                            timestamp.path().display().to_string()
+                        })
+                        .collect();
+                    panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
+                }
+            };
+            let (_, _, exp_data) = exp_data.pop().unwrap();
+
+            // compute average latency
+            let histogram = &exp_data.global_client_latency;
+            let avg = histogram.mean(latency_precision).round() as u64;
+            y.push(avg);
+
+            // maybe create error bar
+            let error_bar = if let ErrorBar::With(percentile) = error_bar {
+                let percentile =
+                    histogram.percentile(percentile, latency_precision).round();
+                percentile as u64 - avg
+            } else {
+                0
+            };
+            // this represents the top of the bar
+            from_err.push(0);
+            // this represents the height of the error bar starting at the
+            // top of the bar
+            to_err.push(error_bar);
+        }
+
+        println!(
+            "{:<7} f = {:?} | {:?}",
+            PlotFmt::protocol_name(protocol),
+            f,
+            y,
+        );
+
+        // compute x: shift all values by `shift`
+        let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
+
+        // create dummy search
+        let n = 0;
+        let f = f.unwrap_or(0);
+        let search = Search::new(n, f, protocol);
+        // plot it error bars:
+        let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
+        pytry!(py, kwargs.set_item("yerr", (from_err, to_err)));
+
+        let line = ax.bar(x, y, Some(kwargs))?;
+        plotted += 1;
+
+        // save line with its legend order
+        legends.insert(
+            legend_order,
+            (line, PlotFmt::label(search.protocol, search.f)),
+        );
+    }
+
+    // set xticks
+    ax.set_xticks(x, None)?;
+
+    // create labels with the number of sites
+    let labels: Vec<_> = ns.into_iter().map(|n| format!("r = {}", n)).collect();
+    ax.set_xticklabels(labels, None)?;
+
+    // set labels
+    let ylabel = format!("latency ({})", latency_precision.name());
+    ax.set_ylabel(&ylabel, None)?;
+
+    // legend
+    // HACK:
+    let legend_column_spacing = if protocol_count == 7 {
+        Some(1.25)
+    } else {
+        None
+    };
+    let x_bbox_to_anchor = Some(0.46);
+    add_legend(
+        plotted,
+        Some(legends),
+        x_bbox_to_anchor,
+        None,
+        legend_column_spacing,
+        py,
+        &ax,
+    )?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+    Ok(())
+}
+
+pub fn fairness_plot<R>(
     searches: Vec<Search>,
     legend_order: Option<Vec<usize>>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
@@ -1796,15 +2109,7 @@ pub fn process_metrics_table(
         };
 
         // fetch all cell data
-        let fast_path = protocol_metrics
-            .get_aggregated(ProtocolMetricsKind::FastPath)
-            .cloned()
-            .unwrap_or_default();
-        let slow_path = protocol_metrics
-            .get_aggregated(ProtocolMetricsKind::SlowPath)
-            .cloned()
-            .unwrap_or_default();
-        let fp_rate = (fast_path * 100) as f64 / (fast_path + slow_path) as f64;
+        let (fast_path, slow_path, fp_rate) = protocol_metrics.fast_path_data();
         let fast_path = Some(fmt(fast_path));
         let slow_path = Some(fmt(slow_path));
         let fp_rate = Some(format!("{:.1}", fp_rate));

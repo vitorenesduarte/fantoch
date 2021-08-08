@@ -840,12 +840,6 @@ mod tests {
         let (us_west1, us_west2) = run(f, clients_per_process);
         assert_eq!(us_west1.mean(), F64::new(34.0));
         assert_eq!(us_west2.mean(), F64::new(58.0));
-
-        // f = 2
-        let f = 2;
-        let (us_west1, us_west2) = run(f, clients_per_process);
-        assert_eq!(us_west1.mean(), F64::new(118.0));
-        assert_eq!(us_west2.mean(), F64::new(142.0));
     }
 
     #[test]

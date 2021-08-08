@@ -1,5 +1,4 @@
 use crate::id::ProcessId;
-use crate::warn;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -52,7 +51,7 @@ impl Config {
     /// system.
     pub fn new(n: usize, f: usize) -> Self {
         if f > n / 2 {
-            warn!("f={} is larger than a minority with n={}", f, n);
+            panic!("f={} is larger than a minority with n={}", f, n);
         }
         // by default, `shard_count = 1`
         let shard_count = 1;
