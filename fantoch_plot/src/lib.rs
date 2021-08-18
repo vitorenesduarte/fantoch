@@ -322,7 +322,8 @@ pub fn nfr_plot(
             let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
 
             // if nfr, plot it normally;
-            // if not nfr (in which case, latency should be higher, plot a black bar)
+            // if not nfr (in which case, latency should be higher, plot a black
+            // bar)
             if nfr {
                 let search = Search::new(n, f, protocol);
                 let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;

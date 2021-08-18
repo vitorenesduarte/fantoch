@@ -43,7 +43,14 @@ impl KeyClocks for AtomicKeyClocks {
 
     fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // if NFR with a read-only single-key command, then don't bump the clock
-        let should_bump = self.nfr && cmd.nfr_allowed();
+        let should_not_bump = self.nfr && cmd.nfr_allowed();
+        let next_clock = |min_clock, current_clock| {
+            if should_not_bump {
+                cmp::max(min_clock, current_clock)
+            } else {
+                cmp::max(min_clock, current_clock + 1)
+            }
+        };
 
         // first round of votes:
         // - vote on each key and compute the highest clock seen
@@ -60,12 +67,16 @@ impl KeyClocks for AtomicKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
             let clock = self.clocks.get_or(key, || AtomicU64::default());
-            let previous_value = Self::bump(should_bump, &clock, up_to);
+            let previous_clock = Self::bump(&clock, |current_clock| {
+                next_clock(up_to, current_clock)
+            });
 
-            // create vote range and save it
-            up_to = cmp::max(up_to, previous_value + 1);
-            let vr = VoteRange::new(self.process_id, previous_value + 1, up_to);
-            votes.set(key.clone(), vec![vr]);
+            up_to = cmp::max(up_to, next_clock(up_to, previous_clock));
+            if previous_clock < up_to {
+                let vr =
+                    VoteRange::new(self.process_id, previous_clock + 1, up_to);
+                votes.set(key.clone(), vec![vr]);
+            }
 
             // save final clock value
             clocks.insert(up_to);
@@ -113,15 +124,18 @@ impl KeyClocks for AtomicKeyClocks {
 }
 
 impl AtomicKeyClocks {
-    // Bump the clock to at least `min_clock`.
-    fn bump(should_bump: bool, clock: &AtomicU64, min_clock: u64) -> u64 {
-        let fetch_update =
-            clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |clock| {
-                let next_clock = if should_bump { clock } else { clock + 1 };
-                Some(cmp::max(min_clock, next_clock))
-            });
+    // Bump the clock to at least `next_clock`.
+    fn bump<F>(clock: &AtomicU64, next_clock: F) -> u64
+    where
+        F: FnOnce(u64) -> u64 + Copy,
+    {
+        let fetch_update = clock.fetch_update(
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+            |current_clock| Some(next_clock(current_clock)),
+        );
         match fetch_update {
-            Ok(previous_value) => previous_value,
+            Ok(previous_clock) => previous_clock,
             Err(_) => {
                 panic!("atomic bump should always succeed");
             }

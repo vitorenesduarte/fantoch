@@ -418,11 +418,12 @@ impl<KC: KeyClocks> Tempo<KC> {
                 process_votes
             );
             // check that there's one vote per key
-            // TODO this is not the case if the command is a `Get`
-            debug_assert_eq!(
-                process_votes.len(),
-                cmd.key_count(self.bp.shard_id)
-            );
+            debug_assert!(if self.bp.config.nfr() && cmd.nfr_allowed() {
+                // in this case, check nothing
+                true
+            } else {
+                process_votes.len() == cmd.key_count(self.bp.shard_id)
+            });
             (clock, process_votes)
         };
 

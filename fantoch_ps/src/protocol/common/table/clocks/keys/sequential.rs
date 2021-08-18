@@ -37,8 +37,8 @@ impl KeyClocks for SequentialKeyClocks {
 
     fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
         // if NFR with a read-only single-key command, then don't bump the clock
-        let should_bump = self.nfr && cmd.nfr_allowed();
-        let next_clock = if should_bump {
+        let should_not_bump = self.nfr && cmd.nfr_allowed();
+        let next_clock = if should_not_bump {
             self.clock(cmd)
         } else {
             self.clock(cmd) + 1

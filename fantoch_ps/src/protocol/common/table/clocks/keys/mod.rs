@@ -49,21 +49,23 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn sequential_key_clocks() {
+    fn sequential_key_clocks_flow() {
         keys_clocks_flow::<SequentialKeyClocks>(true);
+    }
+
+    #[test]
+    fn sequential_key_clocks_no_double_vvotes() {
         keys_clocks_no_double_votes::<SequentialKeyClocks>();
     }
 
     #[test]
-    fn atomic_key_clocks() {
+    fn atomic_key_clocks_flow() {
         keys_clocks_flow::<AtomicKeyClocks>(true);
-        keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
     #[test]
-    fn locked_key_clocks() {
-        keys_clocks_flow::<LockedKeyClocks>(true);
-        keys_clocks_no_double_votes::<LockedKeyClocks>();
+    fn atomic_key_clocks_no_double_votes() {
+        keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
     #[test]
