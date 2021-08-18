@@ -204,11 +204,12 @@ impl<KD: KeyDeps> EPaxos<KD> {
         let deps = self.key_deps.add_cmd(dot, &cmd, None);
 
         // create `MCollect` and target
+        let quorum = self.bp.maybe_adjust_fast_quorum(&cmd);
         let mcollect = Message::MCollect {
             dot,
             cmd,
             deps,
-            quorum: self.bp.fast_quorum(),
+            quorum,
         };
         let target = self.bp.all();
 
@@ -330,14 +331,16 @@ impl<KD: KeyDeps> EPaxos<KD> {
         if info.quorum_deps.all() {
             // compute the union while checking whether all deps reported are
             // equal
-            let (final_deps, all_equal) = info.quorum_deps.check_union();
+            let (final_deps, fast_path) = info.quorum_deps.check_equal();
 
             // create consensus value
             let value = ConsensusValue::with(final_deps);
 
-            // fast path condition: all reported deps were equal
-            if all_equal {
-                self.bp.fast_path();
+            // fast path metrics
+            let cmd = info.cmd.as_ref().unwrap();
+            self.bp.path(fast_path, cmd.read_only());
+
+            if fast_path {
                 // fast path: create `MCommit`
                 let mcommit = Message::MCommit { dot, value };
                 let target = self.bp.all();
@@ -348,7 +351,6 @@ impl<KD: KeyDeps> EPaxos<KD> {
                     msg: mcommit,
                 });
             } else {
-                self.bp.slow_path();
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };

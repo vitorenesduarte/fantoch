@@ -5,6 +5,8 @@ use std::cmp::Ordering;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuorumClocks {
     // fast quorum size
+    // NOTE: the fast quorum size may end up being smaller than this if NFR
+    //       is enabled (see `BaseProcess::maybe_adjust_fast_quorum`)
     fast_quorum_size: usize,
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
@@ -23,6 +25,12 @@ impl QuorumClocks {
             max_clock: 0,
             max_clock_count: 0,
         }
+    }
+
+    /// Maybe change the fast quorum size.
+    pub fn maybe_adjust_fast_quorum_size(&mut self, fast_quorum_size: usize) {
+        assert!(self.participants.is_empty());
+        self.fast_quorum_size = fast_quorum_size;
     }
 
     /// Adds a new `clock` reported by `process_id` and returns the maximum

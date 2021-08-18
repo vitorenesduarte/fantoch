@@ -92,12 +92,7 @@ impl SequentialKeyDeps {
                 None => self.latest.entry(key.clone()).or_default(),
             };
 
-            super::maybe_add_deps(
-                read_only,
-                self.nfr,
-                latest_rw,
-                &mut deps,
-            );
+            super::maybe_add_deps(read_only, self.nfr, latest_rw, &mut deps);
 
             // finally, store the command
             if read_only {
@@ -155,12 +150,7 @@ impl SequentialKeyDeps {
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest command on this key
             if let Some(latest_rw) = self.latest.get(key) {
-                super::maybe_add_deps(
-                    read_only,
-                    self.nfr,
-                    latest_rw,
-                    deps,
-                );
+                super::maybe_add_deps(read_only, self.nfr, latest_rw, deps);
             }
         });
     }

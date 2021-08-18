@@ -559,16 +559,19 @@ impl<KC: KeyClocks> Caesar<KC> {
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
             // if yes, get the aggregated results
-            let (aggregated_clock, aggregated_deps, aggregated_ok) =
+            let (aggregated_clock, aggregated_deps, fast_path) =
                 info.quorum_clocks.aggregated();
 
+            // fast path metrics
+            let cmd = info.cmd.as_ref().unwrap();
+            self.bp.path(fast_path, cmd.read_only());
+
             // fast path condition: all processes reported ok
-            if aggregated_ok {
+            if fast_path {
                 // in this case, all processes have accepted the proposal by the
                 // coordinator; check that that's the case
                 assert_eq!(aggregated_clock, info.clock);
 
-                self.bp.fast_path();
                 // fast path: create `MCommit`
                 let mcommit = Message::MCommit {
                     dot,
@@ -583,7 +586,6 @@ impl<KC: KeyClocks> Caesar<KC> {
                     msg: mcommit,
                 });
             } else {
-                self.bp.slow_path();
                 // slow path: create `MRetry`
                 let mconsensus = Message::MRetry {
                     dot,

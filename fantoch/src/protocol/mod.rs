@@ -165,8 +165,14 @@ impl ProtocolMetrics {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolMetricsKind {
+    /// fast paths of all commands
     FastPath,
+    /// slow paths of all commands
     SlowPath,
+    /// fast paths of all only read commands
+    FastPathReads,
+    /// slow paths of all only read commands
+    SlowPathReads,
     Stable,
     CommitLatency,
     WaitConditionDelay,
@@ -179,6 +185,8 @@ impl Debug for ProtocolMetricsKind {
         match self {
             ProtocolMetricsKind::FastPath => write!(f, "fast_path"),
             ProtocolMetricsKind::SlowPath => write!(f, "slow_path"),
+            ProtocolMetricsKind::FastPathReads => write!(f, "fast_path_reads"),
+            ProtocolMetricsKind::SlowPathReads => write!(f, "slow_path_reads"),
             ProtocolMetricsKind::Stable => write!(f, "stable"),
             ProtocolMetricsKind::CommitLatency => {
                 write!(f, "commit_latency")

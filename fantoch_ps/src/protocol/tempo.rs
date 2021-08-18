@@ -324,14 +324,15 @@ impl<KC: KeyClocks> Tempo<KC> {
         };
 
         // create `MCollect` and target
-        // TODO maybe just don't send to self with `self.bp.all_but_me()`
+        let quorum = self.bp.maybe_adjust_fast_quorum(&cmd);
         let mcollect = Message::MCollect {
             dot,
             cmd,
             clock,
             coordinator_votes,
-            quorum: self.bp.fast_quorum(),
+            quorum,
         };
+        // TODO maybe just don't send to self with `self.bp.all_but_me()`
         let target = self.bp.all();
 
         // add `MCollect` send as action
@@ -436,6 +437,8 @@ impl<KC: KeyClocks> Tempo<KC> {
         // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
+        info.quorum_clocks
+            .maybe_adjust_fast_quorum_size(quorum.len());
         info.quorum = quorum;
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
@@ -520,8 +523,12 @@ impl<KC: KeyClocks> Tempo<KC> {
         if info.quorum_clocks.all() {
             // fast path condition:
             // - if `max_clock` was reported by at least f processes
-            if max_count >= self.bp.config.f() {
-                self.bp.fast_path();
+            let fast_path = max_count >= self.bp.config.f();
+
+            // fast path metrics
+            self.bp.path(fast_path, cmd.read_only());
+
+            if fast_path {
                 // reset local votes as we're going to receive them right away;
                 // this also prevents a `info.votes.clone()`
                 let votes = Self::reset_votes(&mut info.votes);
@@ -538,7 +545,6 @@ impl<KC: KeyClocks> Tempo<KC> {
                     &mut self.to_processes,
                 )
             } else {
-                self.bp.slow_path();
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus {

@@ -238,11 +238,12 @@ impl<KD: KeyDeps> Atlas<KD> {
         let deps = self.key_deps.add_cmd(dot, &cmd, None);
 
         // create `MCollect` and target
+        let quorum = self.bp.maybe_adjust_fast_quorum(&cmd);
         let mcollect = Message::MCollect {
             dot,
             cmd,
             deps,
-            quorum: self.bp.fast_quorum(),
+            quorum,
         };
         let target = self.bp.all();
 
@@ -311,6 +312,7 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // update command info
         info.status = Status::COLLECT;
+        info.quorum_deps.maybe_adjust_fast_quorum_size(quorum.len());
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
@@ -359,19 +361,21 @@ impl<KD: KeyDeps> Atlas<KD> {
         if info.quorum_deps.all() {
             // check if threshold union if equal to union and get the union of
             // all dependencies reported
-            let (all_deps, equal_to_union) =
-                info.quorum_deps.check_threshold_union(self.bp.config.f());
+            let (all_deps, fast_path) =
+                info.quorum_deps.check_threshold(self.bp.config.f());
 
             // create consensus value
             let value = ConsensusValue::with(all_deps);
 
+            // fast path metrics
+            let cmd = info.cmd.as_ref().unwrap();
+            self.bp.path(fast_path, cmd.read_only());
+
             // fast path condition:
             // - each dependency was reported by at least f processes
-            if equal_to_union {
-                self.bp.fast_path();
-
+            if fast_path {
                 // fast path: create `MCommit`
-                let shard_count = info.cmd.as_ref().unwrap().shard_count();
+                let shard_count = cmd.shard_count();
                 Self::mcommit_actions(
                     &self.bp,
                     info,
@@ -381,8 +385,6 @@ impl<KD: KeyDeps> Atlas<KD> {
                     &mut self.to_processes,
                 )
             } else {
-                self.bp.slow_path();
-
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };

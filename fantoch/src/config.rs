@@ -276,6 +276,11 @@ impl Config {
 }
 
 impl Config {
+    /// Computes the size of a majority quorum.
+    pub fn majority_quorum_size(&self) -> usize {
+        (self.n / 2) + 1
+    }
+
     /// Computes `Basic` quorum size.
     pub fn basic_quorum_size(&self) -> usize {
         self.f + 1
@@ -482,6 +487,27 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_skip_fast_ack(true);
         assert!(config.skip_fast_ack());
+    }
+
+    #[test]
+    fn majority_quorum_size() {
+        let config = Config::new(3, 1);
+        assert_eq!(config.majority_quorum_size(), 2);
+
+        let config = Config::new(4, 1);
+        assert_eq!(config.majority_quorum_size(), 3);
+
+        let config = Config::new(5, 1);
+        assert_eq!(config.majority_quorum_size(), 3);
+
+        let config = Config::new(5, 2);
+        assert_eq!(config.majority_quorum_size(), 3);
+
+        let config = Config::new(6, 1);
+        assert_eq!(config.majority_quorum_size(), 4);
+
+        let config = Config::new(7, 1);
+        assert_eq!(config.majority_quorum_size(), 4);
     }
 
     #[test]

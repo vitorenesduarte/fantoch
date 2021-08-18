@@ -43,11 +43,13 @@ mod tests {
 
     // global test config
     const SHARD_COUNT: usize = 1;
-    const COMMANDS_PER_CLIENT: usize = 100;
     const KEY_GEN: KeyGen = KeyGen::ConflictPool {
         conflict_rate: 50,
         pool_size: 1,
     };
+    const KEYS_PER_COMMAND: usize = 2;
+    const READ_ONLY_PERCENTAGE: usize = 0;
+    const COMMANDS_PER_CLIENT: usize = 100;
     const CLIENTS_PER_PROCESS: usize = 10;
 
     macro_rules! config {
@@ -115,8 +117,10 @@ mod tests {
     // ---- tempo tests ---- //
     #[test]
     fn sim_tempo_3_1_test() {
-        let slow_paths = sim_test::<TempoSequential>(
+        let (slow_paths, _) = sim_test::<TempoSequential>(
             tempo_config!(3, 1),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -128,8 +132,10 @@ mod tests {
         // NOTE: with n = 3 we don't really need real time clocks to get the
         // best results
         let clock_bump_interval = Duration::from_millis(50);
-        let slow_paths = sim_test::<TempoSequential>(
+        let (slow_paths, _) = sim_test::<TempoSequential>(
             tempo_config!(3, 1, clock_bump_interval),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -138,8 +144,10 @@ mod tests {
 
     #[test]
     fn sim_tempo_5_1_test() {
-        let slow_paths = sim_test::<TempoSequential>(
+        let (slow_paths, _) = sim_test::<TempoSequential>(
             tempo_config!(5, 1),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -148,8 +156,10 @@ mod tests {
 
     #[test]
     fn sim_tempo_5_2_test() {
-        let slow_paths = sim_test::<TempoSequential>(
+        let (slow_paths, _) = sim_test::<TempoSequential>(
             tempo_config!(5, 2),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -157,10 +167,29 @@ mod tests {
     }
 
     #[test]
+    fn sim_tempo_5_2_nfr_test() {
+        let mut config = tempo_config!(5, 2);
+        config.set_nfr(true);
+        let read_only_percentage = 20;
+        let keys_per_command = 1;
+        let (slow_paths, slow_paths_reads) = sim_test::<TempoSequential>(
+            config,
+            read_only_percentage,
+            keys_per_command,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+        assert!(slow_paths > 0);
+        assert_eq!(slow_paths_reads, 0);
+    }
+
+    #[test]
     fn sim_real_time_tempo_5_1_test() {
         let clock_bump_interval = Duration::from_millis(50);
-        let slow_paths = sim_test::<TempoSequential>(
+        let (slow_paths, _) = sim_test::<TempoSequential>(
             tempo_config!(5, 1, clock_bump_interval),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -301,8 +330,10 @@ mod tests {
     // ---- atlas tests ---- //
     #[test]
     fn sim_atlas_3_1_test() {
-        let slow_paths = sim_test::<AtlasSequential>(
+        let (slow_paths, _) = sim_test::<AtlasSequential>(
             config!(3, 1),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -311,8 +342,10 @@ mod tests {
 
     #[test]
     fn sim_atlas_5_1_test() {
-        let slow_paths = sim_test::<AtlasSequential>(
+        let (slow_paths, _) = sim_test::<AtlasSequential>(
             config!(3, 1),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -321,12 +354,31 @@ mod tests {
 
     #[test]
     fn sim_atlas_5_2_test() {
-        let slow_paths = sim_test::<AtlasSequential>(
+        let (slow_paths, _) = sim_test::<AtlasSequential>(
             config!(5, 2),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
         assert!(slow_paths > 0);
+    }
+
+    #[test]
+    fn sim_atlas_5_2_nfr_test() {
+        let mut config = config!(5, 2);
+        config.set_nfr(true);
+        let read_only_percentage = 20;
+        let keys_per_command = 1;
+        let (slow_paths, slow_paths_reads) = sim_test::<AtlasSequential>(
+            config,
+            read_only_percentage,
+            keys_per_command,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+        assert!(slow_paths > 0);
+        assert_eq!(slow_paths_reads, 0);
     }
 
     #[test]
@@ -401,8 +453,10 @@ mod tests {
     // ---- epaxos tests ---- //
     #[test]
     fn sim_epaxos_3_1_test() {
-        let slow_paths = sim_test::<EPaxosSequential>(
+        let (slow_paths, _) = sim_test::<EPaxosSequential>(
             config!(3, 1),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -411,12 +465,31 @@ mod tests {
 
     #[test]
     fn sim_epaxos_5_2_test() {
-        let slow_paths = sim_test::<EPaxosSequential>(
+        let (slow_paths, _) = sim_test::<EPaxosSequential>(
             config!(5, 2),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
         assert!(slow_paths > 0);
+    }
+
+    #[test]
+    fn sim_epaxos_5_2_nfr_test() {
+        let mut config = config!(5, 2);
+        config.set_nfr(true);
+        let read_only_percentage = 20;
+        let keys_per_command = 1;
+        let (slow_paths, slow_paths_reads) = sim_test::<EPaxosSequential>(
+            config,
+            read_only_percentage,
+            keys_per_command,
+            COMMANDS_PER_CLIENT,
+            CLIENTS_PER_PROCESS,
+        );
+        assert!(slow_paths > 0);
+        assert_eq!(slow_paths_reads, 0);
     }
 
     #[test]
@@ -441,6 +514,8 @@ mod tests {
     fn sim_caesar_wait_3_1_test() {
         let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(3, 1, true),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -450,6 +525,8 @@ mod tests {
     fn sim_caesar_3_1_no_wait_test() {
         let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(3, 1, false),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -459,6 +536,8 @@ mod tests {
     fn sim_caesar_5_2_wait_test() {
         let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(5, 2, true),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -468,6 +547,8 @@ mod tests {
     fn sim_caesar_5_2_no_wait_test() {
         let _slow_paths = sim_test::<CaesarLocked>(
             caesar_config!(5, 2, false),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -508,6 +589,8 @@ mod tests {
         let leader = 1;
         sim_test::<FPaxos>(
             config!(3, 1, leader),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -518,6 +601,8 @@ mod tests {
         let leader = 1;
         sim_test::<FPaxos>(
             config!(5, 2, leader),
+            READ_ONLY_PERCENTAGE,
+            KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
@@ -557,7 +642,7 @@ mod tests {
     }
 
     #[allow(dead_code)]
-    fn metrics_inspect<P>(worker: &P) -> (usize, usize, usize)
+    fn metrics_inspect<P>(worker: &P) -> (usize, usize, usize, usize, usize)
     where
         P: Protocol,
     {
@@ -566,14 +651,22 @@ mod tests {
 
     fn extract_process_metrics(
         metrics: &ProtocolMetrics,
-    ) -> (usize, usize, usize) {
+    ) -> (usize, usize, usize, usize, usize) {
         let metric = |kind| {
             metrics.get_aggregated(kind).cloned().unwrap_or_default() as usize
         };
         let fast_paths = metric(ProtocolMetricsKind::FastPath);
         let slow_paths = metric(ProtocolMetricsKind::SlowPath);
+        let fast_paths_reads = metric(ProtocolMetricsKind::FastPathReads);
+        let slow_paths_reads = metric(ProtocolMetricsKind::SlowPathReads);
         let stable_count = metric(ProtocolMetricsKind::Stable);
-        (fast_paths, slow_paths, stable_count)
+        (
+            fast_paths,
+            slow_paths,
+            fast_paths_reads,
+            slow_paths_reads,
+            stable_count,
+        )
     }
 
     fn run_test<P>(
@@ -590,12 +683,11 @@ mod tests {
         update_config(&mut config, shard_count);
 
         // create workload
-        let keys_per_command = 2;
         let payload_size = 1;
         let workload = Workload::new(
             shard_count,
             KEY_GEN,
-            keys_per_command,
+            KEYS_PER_COMMAND,
             commands_per_client,
             payload_size,
         );
@@ -603,7 +695,10 @@ mod tests {
         // run until the clients end + another 10 seconds
         let extra_run_time = Some(Duration::from_secs(10));
         let metrics = tokio_test_runtime()
-            .block_on(run_test_with_inspect_fun::<P, (usize, usize, usize)>(
+            .block_on(run_test_with_inspect_fun::<
+                P,
+                (usize, usize, usize, usize, usize),
+            >(
                 config,
                 workload,
                 clients_per_process,
@@ -618,29 +713,53 @@ mod tests {
                 // aggregate worker metrics
                 let mut total_fast_paths = 0;
                 let mut total_slow_paths = 0;
+                let mut total_fast_paths_reads = 0;
+                let mut total_slow_paths_reads = 0;
                 let mut total_stable_count = 0;
                 process_metrics.into_iter().for_each(
-                    |(fast_paths, slow_paths, stable_count)| {
+                    |(
+                        fast_paths,
+                        slow_paths,
+                        fast_paths_reads,
+                        slow_paths_reads,
+                        stable_count,
+                    )| {
                         total_fast_paths += fast_paths;
                         total_slow_paths += slow_paths;
+                        total_fast_paths_reads += fast_paths_reads;
+                        total_slow_paths_reads += slow_paths_reads;
                         total_stable_count += stable_count;
                     },
                 );
                 (
                     process_id,
-                    (total_fast_paths, total_slow_paths, total_stable_count),
+                    (
+                        total_fast_paths,
+                        total_slow_paths,
+                        total_fast_paths_reads,
+                        total_slow_paths_reads,
+                        total_stable_count,
+                    ),
                 )
             })
             .collect();
 
-        check_metrics(config, commands_per_client, clients_per_process, metrics)
+        let (slow_paths, _slow_paths_reads) = check_metrics(
+            config,
+            commands_per_client,
+            clients_per_process,
+            metrics,
+        );
+        slow_paths
     }
 
     fn sim_test<P: Protocol>(
         mut config: Config,
+        read_only_percentage: usize,
+        keys_per_command: usize,
         commands_per_client: usize,
         clients_per_process: usize,
-    ) -> usize {
+    ) -> (usize, usize) {
         let shard_count = 1;
         update_config(&mut config, shard_count);
 
@@ -648,15 +767,15 @@ mod tests {
         let planet = Planet::new();
 
         // clients workload
-        let keys_per_command = 2;
         let payload_size = 1;
-        let workload = Workload::new(
+        let mut workload = Workload::new(
             shard_count,
             KEY_GEN,
             keys_per_command,
             commands_per_client,
             payload_size,
         );
+        workload.set_read_only_percentage(read_only_percentage);
 
         // process and client regions
         let mut regions = planet.regions();
@@ -685,9 +804,23 @@ mod tests {
         let metrics = metrics
             .into_iter()
             .map(|(process_id, (process_metrics, _executors_metrics))| {
-                let (fast_paths, slow_paths, stable_count) =
-                    extract_process_metrics(&process_metrics);
-                (process_id, (fast_paths, slow_paths, stable_count))
+                let (
+                    fast_paths,
+                    slow_paths,
+                    fast_paths_reads,
+                    slow_paths_reads,
+                    stable_count,
+                ) = extract_process_metrics(&process_metrics);
+                (
+                    process_id,
+                    (
+                        fast_paths,
+                        slow_paths,
+                        fast_paths_reads,
+                        slow_paths_reads,
+                        stable_count,
+                    ),
+                )
             })
             .collect();
 
@@ -816,22 +949,26 @@ mod tests {
         config: Config,
         commands_per_client: usize,
         clients_per_process: usize,
-        metrics: HashMap<ProcessId, (usize, usize, usize)>,
-    ) -> usize {
+        metrics: HashMap<ProcessId, (usize, usize, usize, usize, usize)>,
+    ) -> (usize, usize) {
         // total fast and slow paths count
         let mut total_fast_paths = 0;
         let mut total_slow_paths = 0;
+        let mut total_fast_paths_reads = 0;
+        let mut total_slow_paths_reads = 0;
         let mut total_stable = 0;
 
         // check process stats
         metrics.into_iter().for_each(
-            |(process_id, (fast_paths, slow_paths, stable))| {
+            |(process_id, (fast_paths, slow_paths, fast_paths_reads, slow_paths_reads, stable))| {
                 println!(
-                    "process id = {} | fast = {} | slow = {} | stable = {}",
-                    process_id, fast_paths, slow_paths, stable
+                    "process id = {} | fast = {} | slow = {} | fast(R) = {} | slow(R) = {} | stable = {}",
+                    process_id, fast_paths, slow_paths, fast_paths_reads, slow_paths_reads, stable
                 );
                 total_fast_paths += fast_paths;
                 total_slow_paths += slow_paths;
+                total_fast_paths_reads += fast_paths_reads;
+                total_slow_paths_reads += slow_paths_reads;
                 total_stable += stable;
             },
         );
@@ -875,6 +1012,6 @@ mod tests {
         );
 
         // return number of slow paths
-        total_slow_paths
+        (total_slow_paths, total_slow_paths_reads)
     }
 }
