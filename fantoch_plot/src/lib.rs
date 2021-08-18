@@ -327,7 +327,6 @@ pub fn nfr_plot(
             if nfr {
                 let search = Search::new(n, f, protocol);
                 let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
-
                 let line = ax.bar(x, y, Some(kwargs))?;
 
                 // save line with its legend order
@@ -338,13 +337,14 @@ pub fn nfr_plot(
 
                 plotted += 1;
             } else {
-                // plot a black bar
+                // plot a light gray bar
+                let light_gray = "#d3d3d3";
                 let kwargs = pydict!(
                     py,
                     ("width", BAR_WIDTH),
                     ("edgecolor", "black"),
                     ("linewidth", 1),
-                    ("color", "black"),
+                    ("color", light_gray),
                 );
                 ax.bar(x, y, Some(kwargs))?;
             }
