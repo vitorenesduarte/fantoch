@@ -58,7 +58,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_deps = KD::new(shard_id, config.deps_nfr());
+        let key_deps = KD::new(shard_id, config.nfr());
         let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
@@ -215,6 +215,12 @@ impl<KD: KeyDeps> Atlas<KD> {
     ) {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
+
+        // record command size
+        self.bp.collect_metric(
+            fantoch::protocol::ProtocolMetricsKind::CommandKeyCount,
+            cmd.total_key_count() as u64,
+        );
 
         // create submit actions
         let create_mforward_submit =

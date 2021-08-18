@@ -10,17 +10,17 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct LockedKeyDeps {
     shard_id: ShardId,
-    deps_nfr: bool,
+    nfr: bool,
     latest: Arc<SharedMap<Key, RwLock<LatestRWDep>>>,
     latest_noop: Arc<RwLock<LatestDep>>,
 }
 
 impl KeyDeps for LockedKeyDeps {
     /// Create a new `LockedKeyDeps` instance.
-    fn new(shard_id: ShardId, deps_nfr: bool) -> Self {
+    fn new(shard_id: ShardId, nfr: bool) -> Self {
         Self {
             shard_id,
-            deps_nfr,
+            nfr,
             latest: Arc::new(SharedMap::new()),
             latest_noop: Arc::new(RwLock::new(None)),
         }
@@ -95,7 +95,7 @@ impl LockedKeyDeps {
             // grab a write lock
             let mut guard = entry.write();
 
-            super::maybe_add_deps(read_only, self.deps_nfr, &guard, &mut deps);
+            super::maybe_add_deps(read_only, self.nfr, &guard, &mut deps);
 
             // finally, store the command
             if read_only {
@@ -169,7 +169,7 @@ impl LockedKeyDeps {
             // grab a read lock
             let guard = entry.read();
 
-            super::maybe_add_deps(read_only, self.deps_nfr, &guard, deps);
+            super::maybe_add_deps(read_only, self.nfr, &guard, deps);
         });
     }
 }

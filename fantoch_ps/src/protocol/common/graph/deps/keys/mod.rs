@@ -68,7 +68,7 @@ pub fn maybe_add_deps(
 
 pub trait KeyDeps: Debug + Clone {
     /// Create a new `KeyDeps` instance.
-    fn new(shard_id: ShardId, deps_nfr: bool) -> Self;
+    fn new(shard_id: ShardId, nfr: bool) -> Self;
 
     /// Sets the command's `Dot` as the latest command on each key touched by
     /// the command, returning the set of local conflicting commands

@@ -7,17 +7,17 @@ use fantoch::{HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyDeps {
     shard_id: ShardId,
-    deps_nfr: bool,
+    nfr: bool,
     latest: HashMap<Key, LatestRWDep>,
     latest_noop: LatestDep,
 }
 
 impl KeyDeps for SequentialKeyDeps {
     /// Create a new `SequentialKeyDeps` instance.
-    fn new(shard_id: ShardId, deps_nfr: bool) -> Self {
+    fn new(shard_id: ShardId, nfr: bool) -> Self {
         Self {
             shard_id,
-            deps_nfr,
+            nfr,
             latest: HashMap::new(),
             latest_noop: None,
         }
@@ -94,7 +94,7 @@ impl SequentialKeyDeps {
 
             super::maybe_add_deps(
                 read_only,
-                self.deps_nfr,
+                self.nfr,
                 latest_rw,
                 &mut deps,
             );
@@ -157,7 +157,7 @@ impl SequentialKeyDeps {
             if let Some(latest_rw) = self.latest.get(key) {
                 super::maybe_add_deps(
                     read_only,
-                    self.deps_nfr,
+                    self.nfr,
                     latest_rw,
                     deps,
                 );
