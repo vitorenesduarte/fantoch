@@ -82,7 +82,12 @@ impl SequentialKeyDeps {
 
         // flag indicating whether the command is read-only
         let read_only = cmd.read_only();
-        let nfr = self.nfr && cmd.total_key_count() == 1;
+        // we only support single-key read commands with NFR
+        assert!(if self.nfr && read_only {
+            cmd.total_key_count() == 1
+        } else {
+            true
+        });
 
         // iterate through all command keys, get their current latest and set
         // ourselves to be the new latest
@@ -93,7 +98,7 @@ impl SequentialKeyDeps {
                 None => self.latest.entry(key.clone()).or_default(),
             };
 
-            super::maybe_add_deps(read_only, nfr, latest_rw, &mut deps);
+            super::maybe_add_deps(read_only, self.nfr, latest_rw, &mut deps);
 
             // finally, store the command
             if read_only {
@@ -147,12 +152,11 @@ impl SequentialKeyDeps {
     fn do_cmd_deps(&self, cmd: &Command, deps: &mut HashSet<Dependency>) {
         // flag indicating whether the command is read-only
         let read_only = cmd.read_only();
-        let nfr = self.nfr && cmd.total_key_count() == 1;
 
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest command on this key
             if let Some(latest_rw) = self.latest.get(key) {
-                super::maybe_add_deps(read_only, nfr, latest_rw, deps);
+                super::maybe_add_deps(read_only, self.nfr, latest_rw, deps);
             }
         });
     }

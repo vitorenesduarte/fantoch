@@ -56,14 +56,22 @@ pub fn maybe_add_deps(
     // if the command is not read-only, and the NFR optimization is not enabled,
     // then the command should also depend on the latest read;
     // in other words:
-    // - reads never depend on reads, and
-    // - writes always depend on reads (unless NFR is enabled, in which case,
-    //   they don't)
+    //  ----------------------------------
+    // | read_only | NFR   | add read dep |
+    //  ----------------------------------
+    // | true      | _     | NO           |
+    // | false     | true  | NO           |
+    // | false     | false | YES          |
+    //  ----------------------------------
     if !read_only && !nfr {
         if let Some(rdep) = latest_rw.read.as_ref() {
             deps.insert(rdep.clone());
         }
     }
+    // in sum:
+    // - reads never depend on reads, and
+    // - writes always depend on reads (unless NFR is enabled, in which case,
+    //   they don't)
 }
 
 pub trait KeyDeps: Debug + Clone {

@@ -86,7 +86,12 @@ impl LockedKeyDeps {
 
         // flag indicating whether the command is read-only
         let read_only = cmd.read_only();
-        let nfr = self.nfr && cmd.total_key_count() == 1;
+        // we only support single-key read commands with NFR
+        assert!(if self.nfr && read_only {
+            cmd.total_key_count() == 1
+        } else {
+            true
+        });
 
         // iterate through all command keys, grab a write lock, get their
         // current latest and set ourselves to be the new latest
@@ -96,7 +101,7 @@ impl LockedKeyDeps {
             // grab a write lock
             let mut guard = entry.write();
 
-            super::maybe_add_deps(read_only, nfr, &guard, &mut deps);
+            super::maybe_add_deps(read_only, self.nfr, &guard, &mut deps);
 
             // finally, store the command
             if read_only {
@@ -163,7 +168,6 @@ impl LockedKeyDeps {
     fn do_cmd_deps(&self, cmd: &Command, deps: &mut HashSet<Dependency>) {
         // flag indicating whether the command is read-only
         let read_only = cmd.read_only();
-        let nfr = self.nfr && cmd.total_key_count() == 1;
 
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest read and write on this key
@@ -171,7 +175,7 @@ impl LockedKeyDeps {
             // grab a read lock
             let guard = entry.read();
 
-            super::maybe_add_deps(read_only, nfr, &guard, deps);
+            super::maybe_add_deps(read_only, self.nfr, &guard, deps);
         });
     }
 }
