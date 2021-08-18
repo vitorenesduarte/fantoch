@@ -56,9 +56,7 @@ impl KeyClocks for AtomicKeyClocks {
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
         //   necessarily end up with all key clocks equal
-        // OPTIMIZATION: keep track of the highest bumped-to value; if we have
-        // to iterate in a way that the highest clock is iterated first, this
-        // will be almost equivalent to `LockedKeyClocks`
+        // OPTIMIZATION: keep track of the highest bumped-to value;
 
         let key_count = cmd.key_count(self.shard_id);
         let mut clocks = HashSet::with_capacity(key_count);
@@ -67,14 +65,13 @@ impl KeyClocks for AtomicKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
             let clock = self.clocks.get_or(key, || AtomicU64::default());
-            let previous_clock = Self::bump(&clock, |current_clock| {
-                next_clock(up_to, current_clock)
-            });
+            let bump =
+                Self::maybe_bump_fn(self.process_id, &clock, |current_clock| {
+                    next_clock(up_to, current_clock)
+                });
 
-            up_to = cmp::max(up_to, next_clock(up_to, previous_clock));
-            if previous_clock < up_to {
-                let vr =
-                    VoteRange::new(self.process_id, previous_clock + 1, up_to);
+            if let Some(vr) = bump {
+                up_to = cmp::max(up_to, vr.end());
                 votes.set(key.clone(), vec![vr]);
             }
 
@@ -83,14 +80,13 @@ impl KeyClocks for AtomicKeyClocks {
         });
 
         // second round of votes:
-        // - if not all clocks match (i.e. we didn't get a result equivalent to
-        //   `LockedKeyClocks`), try to make them match
+        // - if not all clocks match, try to make them match
         if clocks.len() > 1 {
             cmd.keys(self.shard_id).for_each(|key| {
                 let clock = self.clocks.get_or(key, || AtomicU64::default());
-                if let Some(vr) =
-                    Self::maybe_bump(self.process_id, &clock, up_to)
-                {
+                let bump = Self::maybe_bump(self.process_id, &clock, up_to);
+
+                if let Some(vr) = bump {
                     votes.add(key, vr);
                 }
             })
@@ -125,39 +121,39 @@ impl KeyClocks for AtomicKeyClocks {
 
 impl AtomicKeyClocks {
     // Bump the clock to at least `next_clock`.
-    fn bump<F>(clock: &AtomicU64, next_clock: F) -> u64
+    #[must_use]
+    fn maybe_bump_fn<F>(
+        id: ProcessId,
+        clock: &AtomicU64,
+        next_clock: F,
+    ) -> Option<VoteRange>
     where
         F: FnOnce(u64) -> u64 + Copy,
     {
         let fetch_update = clock.fetch_update(
             Ordering::Relaxed,
             Ordering::Relaxed,
-            |current_clock| Some(next_clock(current_clock)),
+            |current| {
+                let next = next_clock(current);
+                if current < next {
+                    Some(next)
+                } else {
+                    None
+                }
+            },
         );
-        match fetch_update {
-            Ok(previous_clock) => previous_clock,
-            Err(_) => {
-                panic!("atomic bump should always succeed");
-            }
-        }
+        fetch_update.ok().map(|previous_value| {
+            VoteRange::new(id, previous_value + 1, next_clock(previous_value))
+        })
     }
 
     // Bump the clock to `up_to` if lower than `up_to`.
+    #[must_use]
     fn maybe_bump(
         id: ProcessId,
         clock: &AtomicU64,
         up_to: u64,
     ) -> Option<VoteRange> {
-        let fetch_update =
-            clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                if value < up_to {
-                    Some(up_to)
-                } else {
-                    None
-                }
-            });
-        fetch_update
-            .ok()
-            .map(|previous_value| VoteRange::new(id, previous_value + 1, up_to))
+        Self::maybe_bump_fn(id, clock, |_| up_to)
     }
 }
