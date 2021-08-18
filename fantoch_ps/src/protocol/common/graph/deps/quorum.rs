@@ -27,13 +27,13 @@ impl QuorumDeps {
 
     /// Maybe change the fast quorum size.
     pub fn maybe_adjust_fast_quorum_size(&mut self, fast_quorum_size: usize) {
-        assert!(self.participants.is_empty());
+        debug_assert!(self.participants.is_empty());
         self.fast_quorum_size = fast_quorum_size;
     }
 
     /// Adds new `deps` reported by `process_id`.
     pub fn add(&mut self, process_id: ProcessId, deps: HashSet<Dependency>) {
-        assert!(self.participants.len() < self.fast_quorum_size);
+        debug_assert!(self.participants.len() < self.fast_quorum_size);
 
         // record new participant
         self.participants.insert(process_id);
@@ -54,7 +54,7 @@ impl QuorumDeps {
         &self,
         threshold: usize,
     ) -> (HashSet<Dependency>, bool) {
-        assert!(self.all());
+        debug_assert!(self.all());
         let mut equal_to_union = true;
 
         let deps: HashSet<_> = self
@@ -72,7 +72,7 @@ impl QuorumDeps {
 
     /// Checks if all deps reported are the same and returns the union.
     pub fn check_equal(&self) -> (HashSet<Dependency>, bool) {
-        assert!(self.all());
+        debug_assert!(self.all());
 
         let (deps, counts): (HashSet<Dependency>, HashSet<usize>) =
             self.threshold_deps.clone().into_iter().unzip();

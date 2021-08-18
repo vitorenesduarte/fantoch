@@ -521,9 +521,18 @@ impl<KC: KeyClocks> Tempo<KC> {
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
+            // compute threshold:
+            // - if the fast quorum is n/2 + f, then the threshold is f
+            // - if the fast quorum is a majority (for single-key reads with
+            //   NFR), then the threshold is 1 (and thus the fast path is always
+            //   taken)
+            let minority = self.bp.config.majority_quorum_size() - 1;
+            let threshold = info.quorum.len() - minority;
+            debug_assert!(threshold <= self.bp.config.f());
+
             // fast path condition:
-            // - if `max_clock` was reported by at least f processes
-            let fast_path = max_count >= self.bp.config.f();
+            // - if `max_clock` was reported by at least `threshold` processes
+            let fast_path = max_count >= threshold;
 
             // fast path metrics
             self.bp.path(fast_path, cmd.read_only());

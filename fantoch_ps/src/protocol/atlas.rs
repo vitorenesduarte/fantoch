@@ -359,10 +359,19 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // check if we have all necessary replies
         if info.quorum_deps.all() {
+            // compute threshold:
+            // - if the fast quorum is n/2 + f, then the threshold is f
+            // - if the fast quorum is a majority (for single-key reads with
+            //   NFR), then the threshold is 1 (and thus the fast path is always
+            //   taken)
+            let minority = self.bp.config.majority_quorum_size() - 1;
+            let threshold = info.quorum.len() - minority;
+            debug_assert!(threshold <= self.bp.config.f());
+
             // check if threshold union if equal to union and get the union of
             // all dependencies reported
             let (all_deps, fast_path) =
-                info.quorum_deps.check_threshold(self.bp.config.f());
+                info.quorum_deps.check_threshold(threshold);
 
             // create consensus value
             let value = ConsensusValue::with(all_deps);

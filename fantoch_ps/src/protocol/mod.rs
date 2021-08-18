@@ -35,7 +35,7 @@ mod tests {
     use fantoch::id::{ProcessId, Rifl};
     use fantoch::kvs::Key;
     use fantoch::planet::Planet;
-    use fantoch::protocol::{Protocol, ProtocolMetrics, ProtocolMetricsKind};
+    use fantoch::protocol::{Protocol, ProtocolMetrics};
     use fantoch::run::tests::{run_test_with_inspect_fun, tokio_test_runtime};
     use fantoch::sim::Runner;
     use fantoch::HashMap;
@@ -479,7 +479,7 @@ mod tests {
     fn sim_epaxos_5_2_nfr_test() {
         let mut config = config!(5, 2);
         config.set_nfr(true);
-        let read_only_percentage = 20;
+        let read_only_percentage = 100;
         let keys_per_command = 1;
         let metrics = sim_test::<EPaxosSequential>(
             config,
@@ -488,7 +488,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(metrics.slow_paths() > 0);
+        assert_eq!(metrics.slow_paths(), 0);
         assert_eq!(metrics.slow_paths_reads(), 0);
     }
 
