@@ -187,9 +187,9 @@ pub enum ProtocolMetricsKind {
     FastPath,
     /// slow paths of all commands
     SlowPath,
-    /// fast paths of all only read commands
+    /// fast paths of read only commands
     FastPathReads,
-    /// slow paths of all only read commands
+    /// slow paths of read only commands
     SlowPathReads,
     Stable,
     CommitLatency,

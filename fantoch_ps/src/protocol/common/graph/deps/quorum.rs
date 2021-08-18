@@ -5,8 +5,6 @@ use fantoch::{HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QuorumDeps {
     // fast quorum size
-    // NOTE: the fast quorum size may end up being smaller than this if NFR
-    //       is enabled (see `BaseProcess::maybe_adjust_fast_quorum`)
     fast_quorum_size: usize,
     // set of processes that have participated in this computation
     participants: HashSet<ProcessId>,
@@ -80,8 +78,8 @@ impl QuorumDeps {
         // i.e. when no dependencies are reported)
         let equal_deps_reported = match counts.len() {
             0 => {
-                // this means that no dependencies were reported, which should
-                // not be possible
+                // this means that no dependencies were reported, and thus it
+                // trivially holds that dependencies reported were all equal
                 true
             }
             1 => {

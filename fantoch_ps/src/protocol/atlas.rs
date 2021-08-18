@@ -216,12 +216,6 @@ impl<KD: KeyDeps> Atlas<KD> {
         // compute the command identifier
         let dot = dot.unwrap_or_else(|| self.bp.next_dot());
 
-        // record command size
-        self.bp.collect_metric(
-            fantoch::protocol::ProtocolMetricsKind::CommandKeyCount,
-            cmd.total_key_count() as u64,
-        );
-
         // create submit actions
         let create_mforward_submit =
             |dot, cmd| Message::MForwardSubmit { dot, cmd };
