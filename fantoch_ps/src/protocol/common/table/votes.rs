@@ -197,8 +197,9 @@ mod tests {
     fn votes_flow() {
         // create clocks
         let shard_id = 0;
-        let mut clocks_p0 = SequentialKeyClocks::new(0, shard_id);
-        let mut clocks_p1 = SequentialKeyClocks::new(1, shard_id);
+        let nfr = false;
+        let mut clocks_p0 = SequentialKeyClocks::new(0, shard_id, nfr);
+        let mut clocks_p1 = SequentialKeyClocks::new(1, shard_id, nfr);
 
         // keys
         let key_a = String::from("A");

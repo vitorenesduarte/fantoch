@@ -10,15 +10,17 @@ use std::cmp;
 pub struct SequentialKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
+    nfr: bool,
     clocks: HashMap<Key, u64>,
 }
 
 impl KeyClocks for SequentialKeyClocks {
     /// Create a new `SequentialKeyClocks` instance.
-    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId, nfr: bool) -> Self {
         let clocks = HashMap::new();
         Self {
             process_id,
+            nfr,
             shard_id,
             clocks,
         }
@@ -34,8 +36,16 @@ impl KeyClocks for SequentialKeyClocks {
     }
 
     fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+        // if NFR with a read-only single-key command, then don't bump the clock
+        let should_bump = self.nfr && cmd.nfr_allowed();
+        let next_clock = if should_bump {
+            self.clock(cmd)
+        } else {
+            self.clock(cmd) + 1
+        };
+
         // bump to at least `min_clock`
-        let clock = cmp::max(min_clock, self.clock(cmd) + 1);
+        let clock = cmp::max(min_clock, next_clock);
 
         // compute votes up to that clock
         let key_count = cmd.key_count(self.shard_id);

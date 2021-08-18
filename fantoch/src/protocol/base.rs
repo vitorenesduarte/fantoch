@@ -213,7 +213,7 @@ impl BaseProcess {
         &self,
         cmd: &Command,
     ) -> HashSet<ProcessId> {
-        if self.config.nfr() && cmd.read_only() && cmd.total_key_count() == 1 {
+        if self.config.nfr() && cmd.nfr_allowed() {
             self.majority_quorum()
         } else {
             self.fast_quorum()

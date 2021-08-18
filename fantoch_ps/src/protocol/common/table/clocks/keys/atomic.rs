@@ -13,12 +13,13 @@ use std::sync::Arc;
 pub struct AtomicKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
+    nfr: bool,
     clocks: Arc<SharedMap<Key, AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
-    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId, nfr: bool) -> Self {
         // create shared clocks
         let clocks = SharedMap::new();
         // wrap them in an arc
@@ -26,6 +27,7 @@ impl KeyClocks for AtomicKeyClocks {
 
         Self {
             process_id,
+            nfr,
             shard_id,
             clocks,
         }
@@ -40,6 +42,9 @@ impl KeyClocks for AtomicKeyClocks {
     }
 
     fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+        // if NFR with a read-only single-key command, then don't bump the clock
+        let should_bump = self.nfr && cmd.nfr_allowed();
+
         // first round of votes:
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
@@ -55,7 +60,7 @@ impl KeyClocks for AtomicKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
             let clock = self.clocks.get_or(key, || AtomicU64::default());
-            let previous_value = Self::bump(&clock, up_to);
+            let previous_value = Self::bump(should_bump, &clock, up_to);
 
             // create vote range and save it
             up_to = cmp::max(up_to, previous_value + 1);
@@ -109,10 +114,11 @@ impl KeyClocks for AtomicKeyClocks {
 
 impl AtomicKeyClocks {
     // Bump the clock to at least `min_clock`.
-    fn bump(clock: &AtomicU64, min_clock: u64) -> u64 {
+    fn bump(should_bump: bool, clock: &AtomicU64, min_clock: u64) -> u64 {
         let fetch_update =
-            clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                Some(cmp::max(min_clock, value + 1))
+            clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |clock| {
+                let next_clock = if should_bump { clock } else { clock + 1 };
+                Some(cmp::max(min_clock, next_clock))
             });
         match fetch_update {
             Ok(previous_value) => previous_value,

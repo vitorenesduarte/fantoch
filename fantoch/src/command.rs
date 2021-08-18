@@ -71,6 +71,11 @@ impl Command {
         Self::new(rifl, shard_to_ops)
     }
 
+    /// Checks if the NFR optimization can be applied.
+    pub fn nfr_allowed(&self) -> bool {
+        self.read_only() && self.total_key_count() == 1
+    }
+
     /// Checks if the command is read-only.
     pub fn read_only(&self) -> bool {
         // a command is read-only if all ops are `Get`s

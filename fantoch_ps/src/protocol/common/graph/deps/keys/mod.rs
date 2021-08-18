@@ -43,7 +43,7 @@ pub struct LatestRWDep {
 
 pub fn maybe_add_deps(
     read_only: bool,
-    deps_nfr: bool,
+    nfr: bool,
     latest_rw: &LatestRWDep,
     deps: &mut HashSet<Dependency>,
 ) {
@@ -59,7 +59,7 @@ pub fn maybe_add_deps(
     // - reads never depend on reads, and
     // - writes always depend on reads (unless NFR is enabled, in which case,
     //   they don't)
-    if !read_only && !deps_nfr {
+    if !read_only && !nfr {
         if let Some(rdep) = latest_rw.read.as_ref() {
             deps.insert(rdep.clone());
         }

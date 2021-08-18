@@ -51,7 +51,7 @@ const TOTAL_KEYS_PER_SHARD: usize = 1_000_000;
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "main";
+const BRANCH: &str = "nfr";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -145,6 +145,14 @@ async fn nfr_plot() -> Result<(), Report> {
         Region::UsWest2,
     ];
     let ns = vec![7, 11];
+    let nfrs = vec![false, true];
+
+    // pair of protocol and whether it provides configurable fault-tolerance
+    let protocols = vec![
+        (Protocol::TempoAtomic, true),
+        (Protocol::AtlasLocked, true),
+        (Protocol::EPaxosLocked, false),
+    ];
 
     let clients_per_region = vec![256];
     let batch_max_sizes = vec![1];
@@ -174,14 +182,6 @@ async fn nfr_plot() -> Result<(), Report> {
     }
 
     let mut skip = |_, _, _| false;
-
-    // pair of protocol and whether it provides configurable fault-tolerance
-    let protocols = vec![
-        (Protocol::TempoAtomic, true),
-        (Protocol::AtlasLocked, true),
-        (Protocol::EPaxosLocked, false),
-    ];
-    let nfrs = vec![false, true];
 
     let mut all_configs = Vec::new();
     for n in ns {

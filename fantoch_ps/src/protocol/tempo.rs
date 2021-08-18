@@ -75,7 +75,7 @@ impl<KC: KeyClocks> Protocol for Tempo<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_clocks = KC::new(process_id, shard_id);
+        let key_clocks = KC::new(process_id, shard_id, config.nfr());
         let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
