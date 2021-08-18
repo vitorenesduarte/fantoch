@@ -177,6 +177,10 @@ impl ProtocolConfig {
             args.extend(args!["--leader", leader]);
         }
         args.extend(args![
+            "--nfr",
+            self.config.nfr()
+        ]);
+        args.extend(args![
             "--tempo_tiny_quorums",
             self.config.tempo_tiny_quorums()
         ]);

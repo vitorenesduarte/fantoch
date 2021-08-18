@@ -23,6 +23,8 @@ const DEFAULT_WORKERS: usize = 1;
 const DEFAULT_EXECUTORS: usize = 1;
 const DEFAULT_MULTIPLEXING: usize = 1;
 
+const DEFAULT_NFR: bool = false;
+
 // tempo's config
 const DEFAULT_TEMPO_TINY_QUORUMS: bool = false;
 const DEFAULT_TEMPO_DETACHED_SEND_INTERVAL: Duration = Duration::from_millis(5);
@@ -230,6 +232,13 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("nfr")
+                .long("nfr")
+                .value_name("NFR")
+                .help("boolean indicating whether NFR is enabled; default: false")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("tempo_tiny_quorums")
                 .long("tempo_tiny_quorums")
                 .value_name("TEMPO_TINY_QUORUMS")
@@ -391,6 +400,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
         ),
         parse_gc_interval(matches.value_of("gc_interval")),
         parse_leader(matches.value_of("leader")),
+        parse_nfr(matches.value_of("nfr")),
         parse_tempo_tiny_quorums(matches.value_of("tempo_tiny_quorums")),
         parse_tempo_clock_bump_interval(
             matches.value_of("tempo_clock_bump_interval"),
@@ -562,6 +572,7 @@ pub fn build_config(
     executor_monitor_pending_interval: Option<Duration>,
     gc_interval: Option<Duration>,
     leader: Option<ProcessId>,
+    nfr: bool,
     tempo_tiny_quorums: bool,
     tempo_clock_bump_interval: Option<Duration>,
     tempo_detached_send_interval: Duration,
@@ -582,6 +593,7 @@ pub fn build_config(
     if let Some(leader) = leader {
         config.set_leader(leader);
     }
+    config.set_nfr(nfr);
     // set tempo's config
     config.set_tempo_tiny_quorums(tempo_tiny_quorums);
     if let Some(interval) = tempo_clock_bump_interval {
@@ -656,6 +668,11 @@ pub fn parse_gc_interval(gc_interval: Option<&str>) -> Option<Duration> {
 
 fn parse_leader(leader: Option<&str>) -> Option<ProcessId> {
     leader.map(|leader| parse_id(leader))
+}
+
+fn parse_nfr(nfr: Option<&str>) -> bool {
+    nfr.map(|nfr| nfr.parse::<bool>().expect("nfr should be a bool"))
+        .unwrap_or(DEFAULT_NFR)
 }
 
 fn parse_tempo_tiny_quorums(tempo_tiny_quorums: Option<&str>) -> bool {
