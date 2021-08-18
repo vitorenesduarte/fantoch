@@ -174,6 +174,13 @@ impl ResultsDB {
                     return false;
                 }
 
+                // filter out configurations with different nfr (if set)
+                if let Some(nfr) = search.nfr {
+                    if exp_config.config.nfr() != nfr {
+                        return false;
+                    }
+                }
+
                 // filter out configurations with different shard_count (if set)
                 if let Some(shard_count) = search.shard_count {
                     if exp_config.config.shard_count() != shard_count {

@@ -17,6 +17,7 @@ pub struct Search {
     pub n: usize,
     pub f: usize,
     pub protocol: Protocol,
+    pub nfr: Option<bool>,
     pub shard_count: Option<usize>,
     pub cpus: Option<usize>,
     pub workers: Option<usize>,
@@ -34,6 +35,7 @@ impl Search {
             n,
             f,
             protocol,
+            nfr: None,
             shard_count: None,
             cpus: None,
             workers: None,
@@ -44,6 +46,11 @@ impl Search {
             payload_size: None,
             batch_max_size: None,
         }
+    }
+
+    pub fn nfr(&mut self, nfr: bool) -> &mut Self {
+        self.nfr = Some(nfr);
+        self
     }
 
     pub fn shard_count(&mut self, shard_count: usize) -> &mut Self {
