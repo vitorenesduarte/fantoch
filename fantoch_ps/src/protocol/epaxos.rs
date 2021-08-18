@@ -278,6 +278,7 @@ impl<KD: KeyDeps> EPaxos<KD> {
 
         // update command info
         info.status = Status::COLLECT;
+        info.quorum_deps.maybe_adjust_fast_quorum_size(quorum.len());
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value

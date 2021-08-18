@@ -476,8 +476,8 @@ mod tests {
     }
 
     #[test]
-    fn sim_epaxos_5_2_nfr_test() {
-        let mut config = config!(5, 2);
+    fn sim_epaxos_7_3_nfr_test() {
+        let mut config = config!(7, 3);
         config.set_nfr(true);
         let read_only_percentage = 100;
         let keys_per_command = 1;
