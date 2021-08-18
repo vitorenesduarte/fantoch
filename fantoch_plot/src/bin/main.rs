@@ -52,7 +52,8 @@ fn eurosys() -> Result<(), Report> {
 #[allow(dead_code)]
 fn fast_path_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAST PATH <<<<<<<<");
-    let results_dir = "../results_fast_path";
+    let results_dir =
+        "/home/vitor.enes/thesis_results/results_fast_path";
     // fixed parameters
     let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
     let payload_size = 100;
@@ -82,8 +83,8 @@ fn fast_path_plot() -> Result<(), Report> {
 
     let protocols_n7 = vec![
         (Protocol::TempoAtomic, 2),
-        (Protocol::AtlasLocked, 2),
         (Protocol::TempoAtomic, 3),
+        (Protocol::AtlasLocked, 2),
         (Protocol::AtlasLocked, 3),
         (Protocol::EPaxosLocked, 3),
     ];
