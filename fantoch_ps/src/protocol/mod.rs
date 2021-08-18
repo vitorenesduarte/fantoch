@@ -117,14 +117,14 @@ mod tests {
     // ---- tempo tests ---- //
     #[test]
     fn sim_tempo_3_1_test() {
-        let (slow_paths, _) = sim_test::<TempoSequential>(
+        let metrics = sim_test::<TempoSequential>(
             tempo_config!(3, 1),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -132,38 +132,38 @@ mod tests {
         // NOTE: with n = 3 we don't really need real time clocks to get the
         // best results
         let clock_bump_interval = Duration::from_millis(50);
-        let (slow_paths, _) = sim_test::<TempoSequential>(
+        let metrics = sim_test::<TempoSequential>(
             tempo_config!(3, 1, clock_bump_interval),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn sim_tempo_5_1_test() {
-        let (slow_paths, _) = sim_test::<TempoSequential>(
+        let metrics = sim_test::<TempoSequential>(
             tempo_config!(5, 1),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn sim_tempo_5_2_test() {
-        let (slow_paths, _) = sim_test::<TempoSequential>(
+        let metrics = sim_test::<TempoSequential>(
             tempo_config!(5, 2),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
+        assert!(metrics.slow_paths() > 0);
     }
 
     #[test]
@@ -172,28 +172,28 @@ mod tests {
         config.set_nfr(true);
         let read_only_percentage = 20;
         let keys_per_command = 1;
-        let (slow_paths, slow_paths_reads) = sim_test::<TempoSequential>(
+        let metrics = sim_test::<TempoSequential>(
             config,
             read_only_percentage,
             keys_per_command,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
-        assert_eq!(slow_paths_reads, 0);
+        assert!(metrics.slow_paths() > 0);
+        assert_eq!(metrics.slow_paths_reads(), 0);
     }
 
     #[test]
     fn sim_real_time_tempo_5_1_test() {
         let clock_bump_interval = Duration::from_millis(50);
-        let (slow_paths, _) = sim_test::<TempoSequential>(
+        let metrics = sim_test::<TempoSequential>(
             tempo_config!(5, 1, clock_bump_interval),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -202,7 +202,7 @@ mod tests {
         // only have one executor
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(3, 1),
             SHARD_COUNT,
             workers,
@@ -210,14 +210,14 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn run_tempo_3_1_locked_test() {
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<TempoLocked>(
+        let metrics = run_test::<TempoLocked>(
             tempo_config!(3, 1),
             SHARD_COUNT,
             workers,
@@ -225,7 +225,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -234,7 +234,7 @@ mod tests {
         let executors = 3;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
         let clock_bump_interval = Duration::from_millis(500);
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(3, 1, clock_bump_interval),
             SHARD_COUNT,
             workers,
@@ -242,14 +242,14 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn run_tempo_5_1_atomic_test() {
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(5, 1),
             SHARD_COUNT,
             workers,
@@ -257,14 +257,14 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn run_tempo_5_2_atomic_test() {
         let workers = 3;
         let executors = 3;
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(5, 2),
             SHARD_COUNT,
             workers,
@@ -272,7 +272,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
+        assert!(metrics.slow_paths() > 0);
     }
 
     // ---- tempo (partial replication) tests ---- //
@@ -282,7 +282,7 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(3, 1),
             shard_count,
             workers,
@@ -290,7 +290,7 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -299,7 +299,7 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(3, 1),
             shard_count,
             workers,
@@ -307,7 +307,7 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -316,7 +316,7 @@ mod tests {
         let workers = 2;
         let executors = 2;
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<TempoAtomic>(
+        let metrics = run_test::<TempoAtomic>(
             tempo_config!(5, 2),
             shard_count,
             workers,
@@ -324,44 +324,44 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert!(slow_paths > 0);
+        assert!(metrics.slow_paths() > 0);
     }
 
     // ---- atlas tests ---- //
     #[test]
     fn sim_atlas_3_1_test() {
-        let (slow_paths, _) = sim_test::<AtlasSequential>(
+        let metrics = sim_test::<AtlasSequential>(
             config!(3, 1),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn sim_atlas_5_1_test() {
-        let (slow_paths, _) = sim_test::<AtlasSequential>(
+        let metrics = sim_test::<AtlasSequential>(
             config!(3, 1),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn sim_atlas_5_2_test() {
-        let (slow_paths, _) = sim_test::<AtlasSequential>(
+        let metrics = sim_test::<AtlasSequential>(
             config!(5, 2),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
+        assert!(metrics.slow_paths() > 0);
     }
 
     #[test]
@@ -370,15 +370,15 @@ mod tests {
         config.set_nfr(true);
         let read_only_percentage = 20;
         let keys_per_command = 1;
-        let (slow_paths, slow_paths_reads) = sim_test::<AtlasSequential>(
+        let metrics = sim_test::<AtlasSequential>(
             config,
             read_only_percentage,
             keys_per_command,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
-        assert_eq!(slow_paths_reads, 0);
+        assert!(metrics.slow_paths() > 0);
+        assert_eq!(metrics.slow_paths_reads(), 0);
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
         // executor
         let workers = 4;
         let executors = 1;
-        let slow_paths = run_test::<AtlasLocked>(
+        let metrics = run_test::<AtlasLocked>(
             config!(3, 1),
             SHARD_COUNT,
             workers,
@@ -395,7 +395,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     // ---- atlas (partial replication) tests ---- //
@@ -405,7 +405,7 @@ mod tests {
         let workers = 2;
         let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<AtlasLocked>(
+        let metrics = run_test::<AtlasLocked>(
             tempo_config!(3, 1),
             shard_count,
             workers,
@@ -413,7 +413,7 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -422,7 +422,7 @@ mod tests {
         let workers = 2;
         let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<AtlasLocked>(
+        let metrics = run_test::<AtlasLocked>(
             tempo_config!(3, 1),
             shard_count,
             workers,
@@ -430,7 +430,7 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
@@ -439,7 +439,7 @@ mod tests {
         let workers = 2;
         let executors = 2; // atlas executor can be parallel in partial replication
         let (commands_per_client, clients_per_process) = small_load_in_ci();
-        let slow_paths = run_test::<AtlasLocked>(
+        let metrics = run_test::<AtlasLocked>(
             tempo_config!(5, 2),
             shard_count,
             workers,
@@ -447,32 +447,32 @@ mod tests {
             commands_per_client,
             clients_per_process,
         );
-        assert!(slow_paths > 0);
+        assert!(metrics.slow_paths() > 0);
     }
 
     // ---- epaxos tests ---- //
     #[test]
     fn sim_epaxos_3_1_test() {
-        let (slow_paths, _) = sim_test::<EPaxosSequential>(
+        let metrics = sim_test::<EPaxosSequential>(
             config!(3, 1),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     #[test]
     fn sim_epaxos_5_2_test() {
-        let (slow_paths, _) = sim_test::<EPaxosSequential>(
+        let metrics = sim_test::<EPaxosSequential>(
             config!(5, 2),
             READ_ONLY_PERCENTAGE,
             KEYS_PER_COMMAND,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
+        assert!(metrics.slow_paths() > 0);
     }
 
     #[test]
@@ -481,15 +481,15 @@ mod tests {
         config.set_nfr(true);
         let read_only_percentage = 20;
         let keys_per_command = 1;
-        let (slow_paths, slow_paths_reads) = sim_test::<EPaxosSequential>(
+        let metrics = sim_test::<EPaxosSequential>(
             config,
             read_only_percentage,
             keys_per_command,
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert!(slow_paths > 0);
-        assert_eq!(slow_paths_reads, 0);
+        assert!(metrics.slow_paths() > 0);
+        assert_eq!(metrics.slow_paths_reads(), 0);
     }
 
     #[test]
@@ -498,7 +498,7 @@ mod tests {
         // executor
         let workers = 4;
         let executors = 1;
-        let slow_paths = run_test::<EPaxosLocked>(
+        let metrics = run_test::<EPaxosLocked>(
             config!(3, 1),
             SHARD_COUNT,
             workers,
@@ -506,7 +506,7 @@ mod tests {
             COMMANDS_PER_CLIENT,
             CLIENTS_PER_PROCESS,
         );
-        assert_eq!(slow_paths, 0);
+        assert_eq!(metrics.slow_paths(), 0);
     }
 
     // ---- caesar tests ---- //
@@ -642,31 +642,11 @@ mod tests {
     }
 
     #[allow(dead_code)]
-    fn metrics_inspect<P>(worker: &P) -> (usize, usize, usize, usize, usize)
+    fn metrics_inspect<P>(worker: &P) -> ProtocolMetrics
     where
         P: Protocol,
     {
-        extract_process_metrics(worker.metrics())
-    }
-
-    fn extract_process_metrics(
-        metrics: &ProtocolMetrics,
-    ) -> (usize, usize, usize, usize, usize) {
-        let metric = |kind| {
-            metrics.get_aggregated(kind).cloned().unwrap_or_default() as usize
-        };
-        let fast_paths = metric(ProtocolMetricsKind::FastPath);
-        let slow_paths = metric(ProtocolMetricsKind::SlowPath);
-        let fast_paths_reads = metric(ProtocolMetricsKind::FastPathReads);
-        let slow_paths_reads = metric(ProtocolMetricsKind::SlowPathReads);
-        let stable_count = metric(ProtocolMetricsKind::Stable);
-        (
-            fast_paths,
-            slow_paths,
-            fast_paths_reads,
-            slow_paths_reads,
-            stable_count,
-        )
+        worker.metrics().clone()
     }
 
     fn run_test<P>(
@@ -676,7 +656,7 @@ mod tests {
         executors: usize,
         commands_per_client: usize,
         clients_per_process: usize,
-    ) -> usize
+    ) -> ProtocolMetrics
     where
         P: Protocol + Send + 'static,
     {
@@ -695,10 +675,7 @@ mod tests {
         // run until the clients end + another 10 seconds
         let extra_run_time = Some(Duration::from_secs(10));
         let metrics = tokio_test_runtime()
-            .block_on(run_test_with_inspect_fun::<
-                P,
-                (usize, usize, usize, usize, usize),
-            >(
+            .block_on(run_test_with_inspect_fun::<P, ProtocolMetrics>(
                 config,
                 workload,
                 clients_per_process,
@@ -709,48 +686,17 @@ mod tests {
             ))
             .expect("run should complete successfully")
             .into_iter()
-            .map(|(process_id, process_metrics)| {
+            .map(|(process_id, all_workers_metrics)| {
                 // aggregate worker metrics
-                let mut total_fast_paths = 0;
-                let mut total_slow_paths = 0;
-                let mut total_fast_paths_reads = 0;
-                let mut total_slow_paths_reads = 0;
-                let mut total_stable_count = 0;
-                process_metrics.into_iter().for_each(
-                    |(
-                        fast_paths,
-                        slow_paths,
-                        fast_paths_reads,
-                        slow_paths_reads,
-                        stable_count,
-                    )| {
-                        total_fast_paths += fast_paths;
-                        total_slow_paths += slow_paths;
-                        total_fast_paths_reads += fast_paths_reads;
-                        total_slow_paths_reads += slow_paths_reads;
-                        total_stable_count += stable_count;
-                    },
-                );
-                (
-                    process_id,
-                    (
-                        total_fast_paths,
-                        total_slow_paths,
-                        total_fast_paths_reads,
-                        total_slow_paths_reads,
-                        total_stable_count,
-                    ),
-                )
+                let mut process_metrics = ProtocolMetrics::new();
+                all_workers_metrics.into_iter().for_each(|worker_metrics| {
+                    process_metrics.merge(&worker_metrics);
+                });
+                (process_id, process_metrics)
             })
             .collect();
 
-        let (slow_paths, _slow_paths_reads) = check_metrics(
-            config,
-            commands_per_client,
-            clients_per_process,
-            metrics,
-        );
-        slow_paths
+        check_metrics(config, commands_per_client, clients_per_process, metrics)
     }
 
     fn sim_test<P: Protocol>(
@@ -759,7 +705,7 @@ mod tests {
         keys_per_command: usize,
         commands_per_client: usize,
         clients_per_process: usize,
-    ) -> (usize, usize) {
+    ) -> ProtocolMetrics {
         let shard_count = 1;
         update_config(&mut config, shard_count);
 
@@ -804,23 +750,7 @@ mod tests {
         let metrics = metrics
             .into_iter()
             .map(|(process_id, (process_metrics, _executors_metrics))| {
-                let (
-                    fast_paths,
-                    slow_paths,
-                    fast_paths_reads,
-                    slow_paths_reads,
-                    stable_count,
-                ) = extract_process_metrics(&process_metrics);
-                (
-                    process_id,
-                    (
-                        fast_paths,
-                        slow_paths,
-                        fast_paths_reads,
-                        slow_paths_reads,
-                        stable_count,
-                    ),
-                )
+                (process_id, process_metrics)
             })
             .collect();
 
@@ -949,29 +879,24 @@ mod tests {
         config: Config,
         commands_per_client: usize,
         clients_per_process: usize,
-        metrics: HashMap<ProcessId, (usize, usize, usize, usize, usize)>,
-    ) -> (usize, usize) {
-        // total fast and slow paths count
-        let mut total_fast_paths = 0;
-        let mut total_slow_paths = 0;
-        let mut total_fast_paths_reads = 0;
-        let mut total_slow_paths_reads = 0;
-        let mut total_stable = 0;
-
+        metrics: HashMap<ProcessId, ProtocolMetrics>,
+    ) -> ProtocolMetrics {
+        let mut all_metrics = ProtocolMetrics::new();
         // check process stats
-        metrics.into_iter().for_each(
-            |(process_id, (fast_paths, slow_paths, fast_paths_reads, slow_paths_reads, stable))| {
+        metrics
+            .into_iter()
+            .for_each(|(process_id, process_metrics)| {
                 println!(
                     "process id = {} | fast = {} | slow = {} | fast(R) = {} | slow(R) = {} | stable = {}",
-                    process_id, fast_paths, slow_paths, fast_paths_reads, slow_paths_reads, stable
+                    process_id,
+                    process_metrics.fast_paths(),
+                    process_metrics.slow_paths(),
+                    process_metrics.fast_paths_reads(),
+                    process_metrics.slow_paths_reads(),
+                    process_metrics.stable()
                 );
-                total_fast_paths += fast_paths;
-                total_slow_paths += slow_paths;
-                total_fast_paths_reads += fast_paths_reads;
-                total_slow_paths_reads += slow_paths_reads;
-                total_stable += stable;
-            },
-        );
+                all_metrics.merge(&process_metrics);
+            });
 
         // compute the min and max number of MCommit messages:
         // - we have min, if all commmands accesss a single shard
@@ -984,7 +909,8 @@ mod tests {
         // check that all commands were committed (only for leaderless
         // protocols)
         if config.leader().is_none() {
-            let total_commits = total_fast_paths + total_slow_paths;
+            let total_commits =
+                (all_metrics.fast_paths() + all_metrics.slow_paths()) as usize;
             assert!(
                 total_commits >= min_total_commits
                     && total_commits <= max_total_commits,
@@ -1007,11 +933,11 @@ mod tests {
         };
         assert_eq!(
             gc_at * min_total_commits,
-            total_stable,
+            all_metrics.stable() as usize,
             "not all processes gced"
         );
 
-        // return number of slow paths
-        (total_slow_paths, total_slow_paths_reads)
+        // return all metrics
+        all_metrics
     }
 }

@@ -236,7 +236,7 @@ where
             let (_, _, exp_data) = exp_data.pop().unwrap();
 
             let (_, _, fast_path_ratio) =
-                exp_data.global_protocol_metrics.fast_path_data();
+                exp_data.global_protocol_metrics.fast_path_stats();
             fast_path_ratios.push(fast_path_ratio as i64);
         }
 
@@ -2109,7 +2109,8 @@ pub fn process_metrics_table(
         };
 
         // fetch all cell data
-        let (fast_path, slow_path, fp_rate) = protocol_metrics.fast_path_data();
+        let (fast_path, slow_path, fp_rate) =
+            protocol_metrics.fast_path_stats();
         let fast_path = Some(fmt(fast_path));
         let slow_path = Some(fmt(slow_path));
         let fp_rate = Some(format!("{:.1}", fp_rate));
