@@ -68,7 +68,7 @@ fn nfr_plot() -> Result<(), Report> {
         (Protocol::EPaxosLocked, None),
     ];
     let legend_order = vec![0, 2, 1, 3, 4];
-    let ns = vec![7, 11];
+    let ns = vec![7];
     let read_only_percentages = vec![20, 50, 80, 100];
     let clients_per_region = 256;
 

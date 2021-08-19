@@ -144,7 +144,7 @@ async fn nfr_plot() -> Result<(), Report> {
         Region::ApSouth1,
         Region::UsWest2,
     ];
-    let ns = vec![7, 11];
+    let ns = vec![7];
     let nfrs = vec![false, true];
 
     // pair of protocol and whether it provides configurable fault-tolerance
