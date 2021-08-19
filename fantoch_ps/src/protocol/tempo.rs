@@ -75,7 +75,7 @@ impl<KC: KeyClocks> Protocol for Tempo<KC> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_clocks = KC::new(process_id, shard_id);
+        let key_clocks = KC::new(process_id, shard_id, config.nfr());
         let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
@@ -324,14 +324,15 @@ impl<KC: KeyClocks> Tempo<KC> {
         };
 
         // create `MCollect` and target
-        // TODO maybe just don't send to self with `self.bp.all_but_me()`
+        let quorum = self.bp.maybe_adjust_fast_quorum(&cmd);
         let mcollect = Message::MCollect {
             dot,
             cmd,
             clock,
             coordinator_votes,
-            quorum: self.bp.fast_quorum(),
+            quorum,
         };
+        // TODO maybe just don't send to self with `self.bp.all_but_me()`
         let target = self.bp.all();
 
         // add `MCollect` send as action
@@ -417,11 +418,12 @@ impl<KC: KeyClocks> Tempo<KC> {
                 process_votes
             );
             // check that there's one vote per key
-            // TODO this is not the case if the command is a `Get`
-            debug_assert_eq!(
-                process_votes.len(),
-                cmd.key_count(self.bp.shard_id)
-            );
+            debug_assert!(if self.bp.config.nfr() && cmd.nfr_allowed() {
+                // in this case, check nothing
+                true
+            } else {
+                process_votes.len() == cmd.key_count(self.bp.shard_id)
+            });
             (clock, process_votes)
         };
 
@@ -436,6 +438,8 @@ impl<KC: KeyClocks> Tempo<KC> {
         // update command info
         info.status = Status::COLLECT;
         info.cmd = Some(cmd);
+        info.quorum_clocks
+            .maybe_adjust_fast_quorum_size(quorum.len());
         info.quorum = quorum;
         // set consensus value
         assert!(info.synod.set_if_not_accepted(|| clock));
@@ -518,10 +522,23 @@ impl<KC: KeyClocks> Tempo<KC> {
 
         // check if we have all necessary replies
         if info.quorum_clocks.all() {
+            // compute threshold:
+            // - if the fast quorum is n/2 + f, then the threshold is f
+            // - if the fast quorum is a majority (for single-key reads with
+            //   NFR), then the threshold is 1 (and thus the fast path is always
+            //   taken)
+            let minority = self.bp.config.majority_quorum_size() - 1;
+            let threshold = info.quorum.len() - minority;
+            debug_assert!(threshold <= self.bp.config.f());
+
             // fast path condition:
-            // - if `max_clock` was reported by at least f processes
-            if max_count >= self.bp.config.f() {
-                self.bp.fast_path();
+            // - if `max_clock` was reported by at least `threshold` processes
+            let fast_path = max_count >= threshold;
+
+            // fast path metrics
+            self.bp.path(fast_path, cmd.read_only());
+
+            if fast_path {
                 // reset local votes as we're going to receive them right away;
                 // this also prevents a `info.votes.clone()`
                 let votes = Self::reset_votes(&mut info.votes);
@@ -538,7 +555,6 @@ impl<KC: KeyClocks> Tempo<KC> {
                     &mut self.to_processes,
                 )
             } else {
-                self.bp.slow_path();
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus {

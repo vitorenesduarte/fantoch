@@ -67,9 +67,9 @@ pub struct PreviousConfig {
     gc_interval: Option<Duration>,
     /// starting leader process
     leader: Option<ProcessId>,
-    /// defines whether dependency-based protocols (atlas & epaxos) should
-    /// employ the NFR optimization
-    deps_nfr: bool,
+    /// defines whether protocols (atlas, epaxos and tempo) should employ the
+    /// NFR optimization
+    nfr: bool,
     /// defines whether tempo should employ tiny quorums or not
     tempo_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
@@ -115,6 +115,8 @@ fn main() -> Result<(), Report> {
         // "/home/vitor.enes/eurosys_results/results_increasing_load",
         // "/home/vitor.enes/eurosys_results/results_partial_replication",
         // "/home/vitor.enes/eurosys_results/results_batching",
+        // "/home/vitor.enes/thesis_results/results_increasing_sites",
+        // "/home/vitor.enes/thesis_results/results_fast_path",
     ] {
         // load results
         let timestamps =
@@ -189,7 +191,7 @@ fn main() -> Result<(), Report> {
                     );
                     config.set_gc_interval(previous.config.gc_interval);
                     config.set_leader(previous.config.leader);
-                    config.set_deps_nfr(previous.config.deps_nfr);
+                    config.set_nfr(previous.config.nfr);
                     config.set_tempo_tiny_quorums(
                         previous.config.tempo_tiny_quorums,
                     );

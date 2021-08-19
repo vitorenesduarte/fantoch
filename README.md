@@ -8,9 +8,10 @@
 - [Tempo (EuroSys'21)](https://vitorenes.org/publication/enes-tempo/): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/tempo.rs)
 - [Atlas (EuroSys'20)](https://vitorenes.org/publication/enes-atlas/): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/atlas.rs)
 - [EPaxos (SOSP'13)](https://www.cs.cmu.edu/~dga/papers/epaxos-sosp2013.pdf): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/epaxos.rs)
+- [Janus (OSDI'16)](https://www.usenix.org/system/files/conference/osdi16/osdi16-mu.pdf): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/atlas.rs)
 - [FPaxos (OPODIS'16)](https://fpaxos.github.io/): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/fpaxos.rs)
 - [Caesar (DSN'17)](https://arxiv.org/abs/1704.03319): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/caesar.rs)
-- [Janus (OSDI'16)](https://www.usenix.org/system/files/conference/osdi16/osdi16-mu.pdf): [source](https://github.com/vitorenesduarte/fantoch/tree/main/fantoch_ps/src/protocol/atlas.rs)
+
 
 #### What does it do?
 

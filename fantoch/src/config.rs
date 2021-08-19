@@ -27,9 +27,9 @@ pub struct Config {
     gc_interval: Option<Duration>,
     /// starting leader process
     leader: Option<ProcessId>,
-    /// defines whether dependency-based protocols (atlas & epaxos) should
-    /// employ the NFR optimization
-    deps_nfr: bool,
+    /// defines whether protocols (atlas, epaxos and tempo) should employ the
+    /// NFR optimization
+    nfr: bool,
     /// defines whether tempo should employ tiny quorums or not
     tempo_tiny_quorums: bool,
     /// defines the interval between clock bumps, if any
@@ -69,8 +69,8 @@ impl Config {
         let gc_interval = None;
         // by default, there's no leader
         let leader = None;
-        // by default, `deps_nfr = false`
-        let deps_nfr = false;
+        // by default, `nfr = false`
+        let nfr = false;
         // by default, `tempo_tiny_quorums = false`
         let tempo_tiny_quorums = false;
         // by default, clocks are not bumped periodically
@@ -92,7 +92,7 @@ impl Config {
             executor_monitor_execution_order,
             gc_interval,
             leader,
-            deps_nfr,
+            nfr,
             tempo_tiny_quorums,
             tempo_clock_bump_interval,
             tempo_detached_send_interval,
@@ -209,13 +209,13 @@ impl Config {
     }
 
     /// Checks whether deps NFR is enabled or not.
-    pub fn deps_nfr(&self) -> bool {
-        self.deps_nfr
+    pub fn nfr(&self) -> bool {
+        self.nfr
     }
 
-    /// Changes the value of `deps_nfr`.
-    pub fn set_deps_nfr(&mut self, deps_nfr: bool) {
-        self.deps_nfr = deps_nfr;
+    /// Changes the value of `nfr`.
+    pub fn set_nfr(&mut self, nfr: bool) {
+        self.nfr = nfr;
     }
 
     /// Checks whether tempo tiny quorums is enabled or not.
@@ -276,6 +276,11 @@ impl Config {
 }
 
 impl Config {
+    /// Computes the size of a majority quorum.
+    pub fn majority_quorum_size(&self) -> usize {
+        (self.n / 2) + 1
+    }
+
     /// Computes `Basic` quorum size.
     pub fn basic_quorum_size(&self) -> usize {
         self.f + 1
@@ -426,15 +431,15 @@ mod tests {
         assert_eq!(config.leader(), Some(leader));
 
         // by default, deps NFR is false
-        assert!(!config.deps_nfr());
+        assert!(!config.nfr());
 
         // if we change it to false, remains false
-        config.set_deps_nfr(false);
-        assert!(!config.deps_nfr());
+        config.set_nfr(false);
+        assert!(!config.nfr());
 
         // if we change it to true, it becomes true
-        config.set_deps_nfr(true);
-        assert!(config.deps_nfr());
+        config.set_nfr(true);
+        assert!(config.nfr());
 
         // by default, tempo tiny quorums is false
         assert!(!config.tempo_tiny_quorums());
@@ -482,6 +487,27 @@ mod tests {
         // if we change it to true, it becomes true
         config.set_skip_fast_ack(true);
         assert!(config.skip_fast_ack());
+    }
+
+    #[test]
+    fn majority_quorum_size() {
+        let config = Config::new(3, 1);
+        assert_eq!(config.majority_quorum_size(), 2);
+
+        let config = Config::new(4, 1);
+        assert_eq!(config.majority_quorum_size(), 3);
+
+        let config = Config::new(5, 1);
+        assert_eq!(config.majority_quorum_size(), 3);
+
+        let config = Config::new(5, 2);
+        assert_eq!(config.majority_quorum_size(), 3);
+
+        let config = Config::new(6, 1);
+        assert_eq!(config.majority_quorum_size(), 4);
+
+        let config = Config::new(7, 1);
+        assert_eq!(config.majority_quorum_size(), 4);
     }
 
     #[test]

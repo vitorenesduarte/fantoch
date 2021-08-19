@@ -36,6 +36,7 @@ const FIGSIZE: (f64, f64) = (FIGWIDTH, (FIGWIDTH / GOLDEN_RATIO) - 0.6);
 const ADJUST_TOP: f64 = 0.83;
 const ADJUST_BOTTOM: f64 = 0.15;
 
+#[derive(Debug, Clone)]
 pub enum ErrorBar {
     With(f64),
     Without,
@@ -181,6 +182,214 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
+pub fn nfr_plot(
+    n: usize,
+    read_only_percentages: Vec<usize>,
+    protocols: Vec<(Protocol, Option<usize>)>,
+    key_gen: KeyGen,
+    clients_per_region: usize,
+    payload_size: usize,
+    legend_order: Option<Vec<usize>>,
+    style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
+    latency_precision: LatencyPrecision,
+    output_dir: Option<&str>,
+    output_file: &str,
+    db: &ResultsDB,
+) -> Result<(), Report> {
+    const FULL_REGION_WIDTH: f64 = 10f64;
+    const MAX_COMBINATIONS: usize = 5;
+    // 80% of `FULL_REGION_WIDTH` when `MAX_COMBINATIONS` is reached
+    const BAR_WIDTH: f64 = FULL_REGION_WIDTH * 0.8 / MAX_COMBINATIONS as f64;
+
+    assert!(
+        protocols.len() <= MAX_COMBINATIONS,
+        "nfr_plot: expected less searches than the max number of combinations"
+    );
+
+    // compute x: one per `read_only_percentage`
+    let x: Vec<_> = (0..read_only_percentages.len())
+        .map(|i| i as f64 * FULL_REGION_WIDTH)
+        .collect();
+
+    // we need to shift all to the left by half of the number of combinations
+    let protocol_count = protocols.len();
+    let shift_left = protocol_count as f64 / 2f64;
+    // we also need to shift half bar to the right
+    let shift_right = 0.5;
+    let protocols =
+        protocols.into_iter().enumerate().map(|(index, protocol)| {
+            // compute index according to shifts
+            let mut base = index as f64 - shift_left + shift_right;
+
+            // HACK to separate move `f = 1` (i.e. the first 2 searches) a bit
+            // to the left and `f = 2` (i.e. the remaining 3
+            // searches) a bit to the right
+            if protocol_count == 5 {
+                if index < 2 {
+                    base += 0.25;
+                } else {
+                    base += 0.75;
+                }
+            }
+            // compute combination's shift
+            let shift = base * BAR_WIDTH;
+            (shift, protocol)
+        });
+
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot
+    let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // keep track of the number of plotted instances
+    let mut plotted = 0;
+
+    // compute legend order: if not defined, then it's the order given by
+    // `protocols`
+    let legend_order = legend_order
+        .unwrap_or_else(|| (0..protocols.len()).collect::<Vec<_>>());
+    assert_eq!(
+        legend_order.len(),
+        protocols.len(),
+        "legend order should contain the same number of protocols"
+    );
+    let protocols_with_legends = protocols.into_iter().zip(legend_order);
+
+    let mut legends = BTreeMap::new();
+
+    for nfr in vec![false, true] {
+        for ((shift, (protocol, f)), legend_order) in
+            protocols_with_legends.clone()
+        {
+            // set `f` to be a minority in case it's not set
+            let f = f.unwrap_or(n / 2);
+
+            let mut y = Vec::new();
+            for read_only_percentage in read_only_percentages.clone() {
+                let mut search = Search::new(n, f, protocol);
+                // filter by key gen, clients per region and payload size
+                search
+                    .key_gen(key_gen)
+                    .clients_per_region(clients_per_region)
+                    .payload_size(payload_size)
+                    .read_only_percentage(read_only_percentage)
+                    .nfr(nfr);
+
+                let mut exp_data = db.find(search)?;
+                match exp_data.len() {
+                    0 => {
+                        eprintln!(
+                            "missing data for {} f = {} nfr = {} reads = {}",
+                            PlotFmt::protocol_name(search.protocol),
+                            search.f,
+                            nfr,
+                            read_only_percentage,
+                        );
+                        y.push(0);
+                        continue;
+                    }
+                    1 => (),
+                    _ => {
+                        let matches: Vec<_> = exp_data
+                            .into_iter()
+                            .map(|(timestamp, _, _)| {
+                                timestamp.path().display().to_string()
+                            })
+                            .collect();
+                        panic!("found more than 1 matching experiment for this search criteria: search {:?} | matches {:?}", search, matches);
+                    }
+                };
+                let (_, _, exp_data) = exp_data.pop().unwrap();
+
+                // compute average latency
+                let histogram = &exp_data.global_client_latency;
+                let avg = histogram.mean(latency_precision).round() as u64;
+                y.push(avg);
+            }
+
+            println!(
+                "{:<7} f = {:?} nfr = {} | {:?}",
+                PlotFmt::protocol_name(protocol),
+                f,
+                nfr,
+                y,
+            );
+
+            // compute x: shift all values by `shift`
+            let x: Vec<_> = x.iter().map(|&x| x + shift).collect();
+
+            // if nfr, plot it normally;
+            // if not nfr (in which case, latency should be higher, plot a black
+            // bar)
+            if nfr {
+                let search = Search::new(n, f, protocol);
+                let kwargs = bar_style(py, search, &style_fun, BAR_WIDTH)?;
+                let line = ax.bar(x, y, Some(kwargs))?;
+
+                // save line with its legend order
+                legends.insert(
+                    legend_order,
+                    (line, PlotFmt::label(search.protocol, search.f)),
+                );
+
+                plotted += 1;
+            } else {
+                // plot a light gray bar
+                let light_gray = "#d3d3d3";
+                let kwargs = pydict!(
+                    py,
+                    ("width", BAR_WIDTH),
+                    ("edgecolor", "black"),
+                    ("linewidth", 1),
+                    ("color", light_gray),
+                );
+                ax.bar(x, y, Some(kwargs))?;
+            }
+        }
+    }
+
+    // set xticks
+    ax.set_xticks(x, None)?;
+
+    // create labels with the number of sites
+    let labels: Vec<_> = read_only_percentages
+        .into_iter()
+        .map(|read_only_percentage| {
+            format!("w = {}%", 100 - read_only_percentage)
+        })
+        .collect();
+    ax.set_xticklabels(labels, None)?;
+
+    // set labels
+    let ylabel = format!("latency ({})", latency_precision.name());
+    ax.set_ylabel(&ylabel, None)?;
+
+    // legend
+    // HACK:
+    let legend_column_spacing = if protocol_count == 7 {
+        Some(1.25)
+    } else {
+        None
+    };
+    let x_bbox_to_anchor = Some(0.46);
+    add_legend(
+        plotted,
+        Some(legends),
+        x_bbox_to_anchor,
+        None,
+        legend_column_spacing,
+        py,
+        &ax,
+    )?;
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+    Ok(())
+}
+
 pub fn fast_path_plot<F>(
     searches: Vec<Search>,
     clients_per_region: usize,
@@ -236,7 +445,7 @@ where
             let (_, _, exp_data) = exp_data.pop().unwrap();
 
             let (_, _, fast_path_ratio) =
-                exp_data.global_protocol_metrics.fast_path_data();
+                exp_data.global_protocol_metrics.fast_path_stats();
             fast_path_ratios.push(fast_path_ratio as i64);
         }
 
@@ -313,7 +522,7 @@ pub fn increasing_sites_plot(
 
     assert!(
         protocols.len() <= MAX_COMBINATIONS,
-        "latency_plot: expected less searches than the max number of combinations"
+        "increasing_sites_plot: expected less searches than the max number of combinations"
     );
 
     // compute x: one per `n`
@@ -2109,7 +2318,8 @@ pub fn process_metrics_table(
         };
 
         // fetch all cell data
-        let (fast_path, slow_path, fp_rate) = protocol_metrics.fast_path_data();
+        let (fast_path, slow_path, fp_rate) =
+            protocol_metrics.fast_path_stats();
         let fast_path = Some(fmt(fast_path));
         let slow_path = Some(fmt(slow_path));
         let fp_rate = Some(format!("{:.1}", fp_rate));

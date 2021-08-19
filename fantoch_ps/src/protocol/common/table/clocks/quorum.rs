@@ -25,10 +25,16 @@ impl QuorumClocks {
         }
     }
 
+    /// Maybe change the fast quorum size.
+    pub fn maybe_adjust_fast_quorum_size(&mut self, fast_quorum_size: usize) {
+        debug_assert!(self.participants.is_empty());
+        self.fast_quorum_size = fast_quorum_size;
+    }
+
     /// Adds a new `clock` reported by `process_id` and returns the maximum
     /// clock seen until now.
     pub fn add(&mut self, process_id: ProcessId, clock: u64) -> (u64, usize) {
-        assert!(self.participants.len() < self.fast_quorum_size);
+        debug_assert!(self.participants.len() < self.fast_quorum_size);
 
         // record new participant
         self.participants.insert(process_id);

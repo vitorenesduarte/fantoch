@@ -95,12 +95,6 @@ pub async fn bench_experiment(
                         continue;
                     }
 
-                    if protocol == Protocol::TempoAtomic
-                        && workload.read_only_percentage() > 0
-                    {
-                        panic!("TempoAtomic doesn't support read-only commands")
-                    }
-
                     if let KeyGen::ConflictPool { .. } = workload.key_gen() {
                         if workload.shard_count() > 1 {
                             // the conflict rate key gen is weird in partial

@@ -58,7 +58,7 @@ impl<KD: KeyDeps> Protocol for Atlas<KD> {
             fast_quorum_size,
             write_quorum_size,
         );
-        let key_deps = KD::new(shard_id, config.deps_nfr());
+        let key_deps = KD::new(shard_id, config.nfr());
         let cmds = SequentialCommandsInfo::new(
             process_id,
             shard_id,
@@ -232,11 +232,12 @@ impl<KD: KeyDeps> Atlas<KD> {
         let deps = self.key_deps.add_cmd(dot, &cmd, None);
 
         // create `MCollect` and target
+        let quorum = self.bp.maybe_adjust_fast_quorum(&cmd);
         let mcollect = Message::MCollect {
             dot,
             cmd,
             deps,
-            quorum: self.bp.fast_quorum(),
+            quorum,
         };
         let target = self.bp.all();
 
@@ -305,6 +306,7 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // update command info
         info.status = Status::COLLECT;
+        info.quorum_deps.maybe_adjust_fast_quorum_size(quorum.len());
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value
@@ -351,21 +353,32 @@ impl<KD: KeyDeps> Atlas<KD> {
 
         // check if we have all necessary replies
         if info.quorum_deps.all() {
+            // compute threshold:
+            // - if the fast quorum is n/2 + f, then the threshold is f
+            // - if the fast quorum is a majority (for single-key reads with
+            //   NFR), then the threshold is 1 (and thus the fast path is always
+            //   taken)
+            let minority = self.bp.config.majority_quorum_size() - 1;
+            let threshold = info.quorum.len() - minority;
+            debug_assert!(threshold <= self.bp.config.f());
+
             // check if threshold union if equal to union and get the union of
             // all dependencies reported
-            let (all_deps, equal_to_union) =
-                info.quorum_deps.check_threshold_union(self.bp.config.f());
+            let (all_deps, fast_path) =
+                info.quorum_deps.check_threshold(threshold);
 
             // create consensus value
             let value = ConsensusValue::with(all_deps);
 
+            // fast path metrics
+            let cmd = info.cmd.as_ref().unwrap();
+            self.bp.path(fast_path, cmd.read_only());
+
             // fast path condition:
             // - each dependency was reported by at least f processes
-            if equal_to_union {
-                self.bp.fast_path();
-
+            if fast_path {
                 // fast path: create `MCommit`
-                let shard_count = info.cmd.as_ref().unwrap().shard_count();
+                let shard_count = cmd.shard_count();
                 Self::mcommit_actions(
                     &self.bp,
                     info,
@@ -375,8 +388,6 @@ impl<KD: KeyDeps> Atlas<KD> {
                     &mut self.to_processes,
                 )
             } else {
-                self.bp.slow_path();
-
                 // slow path: create `MConsensus`
                 let ballot = info.synod.skip_prepare();
                 let mconsensus = Message::MConsensus { dot, ballot, value };

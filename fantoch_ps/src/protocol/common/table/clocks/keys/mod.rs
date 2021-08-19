@@ -19,7 +19,7 @@ use std::fmt::Debug;
 
 pub trait KeyClocks: Debug + Clone {
     /// Create a new `KeyClocks` instance given the local process identifier.
-    fn new(id: ProcessId, shard_id: ShardId) -> Self;
+    fn new(id: ProcessId, shard_id: ShardId, nfr: bool) -> Self;
 
     /// Makes sure there's a clock for each key in the command.
     fn init_clocks(&mut self, cmd: &Command);
@@ -49,21 +49,23 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn sequential_key_clocks() {
+    fn sequential_key_clocks_flow() {
         keys_clocks_flow::<SequentialKeyClocks>(true);
+    }
+
+    #[test]
+    fn sequential_key_clocks_no_double_vvotes() {
         keys_clocks_no_double_votes::<SequentialKeyClocks>();
     }
 
     #[test]
-    fn atomic_key_clocks() {
+    fn atomic_key_clocks_flow() {
         keys_clocks_flow::<AtomicKeyClocks>(true);
-        keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
     #[test]
-    fn locked_key_clocks() {
-        keys_clocks_flow::<LockedKeyClocks>(true);
-        keys_clocks_no_double_votes::<LockedKeyClocks>();
+    fn atomic_key_clocks_no_double_votes() {
+        keys_clocks_no_double_votes::<AtomicKeyClocks>();
     }
 
     #[test]
@@ -109,7 +111,8 @@ mod tests {
         // create key clocks
         let process_id = 1;
         let shard_id = 0;
-        let mut clocks = KC::new(process_id, shard_id);
+        let nfr = false;
+        let mut clocks = KC::new(process_id, shard_id, nfr);
 
         // keys
         let key_a = String::from("A");
@@ -193,7 +196,8 @@ mod tests {
         // create key clocks
         let process_id = 1;
         let shard_id = 0;
-        let mut clocks = KC::new(process_id, shard_id);
+        let nfr = false;
+        let mut clocks = KC::new(process_id, shard_id, nfr);
 
         // command
         let key = String::from("A");
@@ -257,7 +261,8 @@ mod tests {
         // create clocks
         let process_id = 1;
         let shard_id = 0;
-        let clocks = K::new(process_id, shard_id);
+        let nfr = false;
+        let clocks = K::new(process_id, shard_id, nfr);
 
         // spawn workers
         let handles: Vec<_> = (0..nthreads)

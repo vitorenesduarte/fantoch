@@ -1,3 +1,4 @@
+use crate::command::Command;
 use crate::config::Config;
 use crate::id::{Dot, DotGen, ProcessId, ShardId};
 use crate::protocol::{ProtocolMetrics, ProtocolMetricsKind};
@@ -13,6 +14,7 @@ pub struct BaseProcess {
     pub config: Config,
     all: Option<HashSet<ProcessId>>,
     all_but_me: Option<HashSet<ProcessId>>,
+    majority_quorum: Option<HashSet<ProcessId>>,
     fast_quorum: Option<HashSet<ProcessId>>,
     write_quorum: Option<HashSet<ProcessId>>,
     // mapping from shard id (that are not the same as mine) to the closest
@@ -44,6 +46,7 @@ impl BaseProcess {
             config,
             all: None,
             all_but_me: None,
+            majority_quorum: None,
             fast_quorum: None,
             write_quorum: None,
             closest_shard_process: HashMap::new(),
@@ -80,6 +83,15 @@ impl BaseProcess {
             })
             .collect();
 
+        let majority_quorum_size = self.config.majority_quorum_size();
+        // create majority quorum by taking the first `majority_quorum_size`
+        // elements
+        let majority_quorum: HashSet<_> = processes
+            .clone()
+            .into_iter()
+            .take(majority_quorum_size)
+            .collect();
+
         // create fast quorum by taking the first `fast_quorum_size` elements
         let fast_quorum: HashSet<_> = processes
             .clone()
@@ -103,14 +115,22 @@ impl BaseProcess {
         self.all = Some(all);
         self.all_but_me = Some(all_but_me);
 
-        // set fast quorum if we have enough fast quorum processes
+        // set majority quorum if we have enough processes
+        self.majority_quorum = if majority_quorum.len() == majority_quorum_size
+        {
+            Some(majority_quorum)
+        } else {
+            None
+        };
+
+        // set fast quorum if we have enough processes
         self.fast_quorum = if fast_quorum.len() == self.fast_quorum_size {
             Some(fast_quorum)
         } else {
             None
         };
 
-        // set write quorum if we have enough write quorum processes
+        // set write quorum if we have enough processes
         self.write_quorum = if write_quorum.len() == self.write_quorum_size {
             Some(write_quorum)
         } else {
@@ -118,16 +138,19 @@ impl BaseProcess {
         };
 
         trace!(
-            "p{}: all_but_me {:?} | fast_quorum {:?} | write_quorum {:?} | closest_shard_process {:?}",
+            "p{}: all_but_me {:?} | majority_quorum {:?} | fast_quorum {:?} | write_quorum {:?} | closest_shard_process {:?}",
             self.process_id,
             self.all_but_me,
+            self.majority_quorum,
             self.fast_quorum,
             self.write_quorum,
             self.closest_shard_process
         );
 
-        // connected if fast quorum and write quorum are set
-        self.fast_quorum.is_some() && self.write_quorum.is_some()
+        // connected if quorums are set
+        self.majority_quorum.is_some()
+            && self.fast_quorum.is_some()
+            && self.write_quorum.is_some()
     }
 
     // Returns the next dot.
@@ -147,6 +170,13 @@ impl BaseProcess {
         self.all_but_me
             .clone()
             .expect("the set of all processes (except self) should be known")
+    }
+
+    // Returns a majority quorum.
+    pub fn majority_quorum(&self) -> HashSet<ProcessId> {
+        self.majority_quorum
+            .clone()
+            .expect("the majority quorum should be known")
     }
 
     // Returns the fast quorum.
@@ -176,19 +206,40 @@ impl BaseProcess {
         &self.closest_shard_process
     }
 
+    // Computes the quorum to be used:
+    // - use majority quorum if NFR is enabled, and `cmd` is a single-key read
+    // - use fast quorum otherwise
+    pub fn maybe_adjust_fast_quorum(
+        &self,
+        cmd: &Command,
+    ) -> HashSet<ProcessId> {
+        if self.config.nfr() && cmd.nfr_allowed() {
+            self.majority_quorum()
+        } else {
+            self.fast_quorum()
+        }
+    }
+
     // Return metrics.
     pub fn metrics(&self) -> &ProtocolMetrics {
         &self.metrics
     }
 
-    // Increment fast path count.
-    pub fn fast_path(&mut self) {
-        self.metrics.aggregate(ProtocolMetricsKind::FastPath, 1);
-    }
-
-    // Increment slow path count.
-    pub fn slow_path(&mut self) {
-        self.metrics.aggregate(ProtocolMetricsKind::SlowPath, 1);
+    // Update fast path metrics.
+    pub fn path(&mut self, fast_path: bool, read_only: bool) {
+        if fast_path {
+            self.metrics.aggregate(ProtocolMetricsKind::FastPath, 1);
+            if read_only {
+                self.metrics
+                    .aggregate(ProtocolMetricsKind::FastPathReads, 1);
+            }
+        } else {
+            self.metrics.aggregate(ProtocolMetricsKind::SlowPath, 1);
+            if read_only {
+                self.metrics
+                    .aggregate(ProtocolMetricsKind::SlowPathReads, 1);
+            }
+        }
     }
 
     // Accumulate more stable commands.

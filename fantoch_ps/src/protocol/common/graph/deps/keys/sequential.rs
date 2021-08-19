@@ -7,17 +7,17 @@ use fantoch::{HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SequentialKeyDeps {
     shard_id: ShardId,
-    deps_nfr: bool,
+    nfr: bool,
     latest: HashMap<Key, LatestRWDep>,
     latest_noop: LatestDep,
 }
 
 impl KeyDeps for SequentialKeyDeps {
     /// Create a new `SequentialKeyDeps` instance.
-    fn new(shard_id: ShardId, deps_nfr: bool) -> Self {
+    fn new(shard_id: ShardId, nfr: bool) -> Self {
         Self {
             shard_id,
-            deps_nfr,
+            nfr,
             latest: HashMap::new(),
             latest_noop: None,
         }
@@ -82,6 +82,12 @@ impl SequentialKeyDeps {
 
         // flag indicating whether the command is read-only
         let read_only = cmd.read_only();
+        // we only support single-key read commands with NFR
+        assert!(if self.nfr && read_only {
+            cmd.total_key_count() == 1
+        } else {
+            true
+        });
 
         // iterate through all command keys, get their current latest and set
         // ourselves to be the new latest
@@ -92,12 +98,7 @@ impl SequentialKeyDeps {
                 None => self.latest.entry(key.clone()).or_default(),
             };
 
-            super::maybe_add_deps(
-                read_only,
-                self.deps_nfr,
-                latest_rw,
-                &mut deps,
-            );
+            super::maybe_add_deps(read_only, self.nfr, latest_rw, &mut deps);
 
             // finally, store the command
             if read_only {
@@ -155,12 +156,7 @@ impl SequentialKeyDeps {
         cmd.keys(self.shard_id).for_each(|key| {
             // get latest command on this key
             if let Some(latest_rw) = self.latest.get(key) {
-                super::maybe_add_deps(
-                    read_only,
-                    self.deps_nfr,
-                    latest_rw,
-                    deps,
-                );
+                super::maybe_add_deps(read_only, self.nfr, latest_rw, deps);
             }
         });
     }

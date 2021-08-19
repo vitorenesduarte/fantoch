@@ -34,8 +34,9 @@ fn main() -> Result<(), Report> {
 #[allow(dead_code)]
 fn thesis() -> Result<(), Report> {
     // eurosys()?;
-    fast_path_plot()?;
+    nfr_plot()?;
     // increasing_sites_plot()?;
+    // fast_path_plot()?;
     Ok(())
 }
 
@@ -50,9 +51,57 @@ fn eurosys() -> Result<(), Report> {
 }
 
 #[allow(dead_code)]
+fn nfr_plot() -> Result<(), Report> {
+    println!(">>>>>>>> NFR <<<<<<<<");
+    let results_dir = "../results_nfr";
+    // fixed parameters
+    let key_gen = KeyGen::Zipf {
+        total_keys_per_shard: 1_000_000,
+        coefficient: 0.99,
+    };
+    let payload_size = 100;
+    let protocols = vec![
+        (Protocol::TempoAtomic, Some(1)),
+        (Protocol::AtlasLocked, Some(1)),
+        (Protocol::TempoAtomic, Some(2)),
+        (Protocol::AtlasLocked, Some(2)),
+        (Protocol::EPaxosLocked, None),
+    ];
+    let legend_order = vec![0, 2, 1, 3, 4];
+    let ns = vec![7];
+    let read_only_percentages = vec![20, 50, 80, 100];
+    let clients_per_region = 256;
+
+    // load results
+    let db = ResultsDB::load(results_dir).wrap_err("load results")?;
+
+    for n in ns {
+        // generate plot
+        let path = format!("plot_nfr_n{}.pdf", n);
+        let style_fun = None;
+        let latency_precision = LatencyPrecision::Millis;
+        fantoch_plot::nfr_plot(
+            n,
+            read_only_percentages.clone(),
+            protocols.clone(),
+            key_gen,
+            clients_per_region,
+            payload_size,
+            Some(legend_order.clone()),
+            style_fun,
+            latency_precision,
+            PLOT_DIR,
+            &path,
+            &db,
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
 fn fast_path_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAST PATH <<<<<<<<");
-    let results_dir = "../results_fast_path";
+    let results_dir = "/home/vitor.enes/thesis_results/results_fast_path";
     // fixed parameters
     let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
     let payload_size = 100;
@@ -82,8 +131,8 @@ fn fast_path_plot() -> Result<(), Report> {
 
     let protocols_n7 = vec![
         (Protocol::TempoAtomic, 2),
-        (Protocol::AtlasLocked, 2),
         (Protocol::TempoAtomic, 3),
+        (Protocol::AtlasLocked, 2),
         (Protocol::AtlasLocked, 3),
         (Protocol::EPaxosLocked, 3),
     ];
@@ -155,7 +204,7 @@ fn increasing_sites_plot() -> Result<(), Report> {
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    // generate latency plot
+    // generate plot
     let path = String::from("plot_increasing_sites.pdf");
     let style_fun = None;
     let latency_precision = LatencyPrecision::Millis;

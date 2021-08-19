@@ -24,15 +24,17 @@ type Clocks = Arc<SharedMap<Key, Mutex<ClockAndPendingReads>>>;
 pub struct LockedKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
+    nfr: bool,
     clocks: Clocks,
 }
 
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
-    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId, nfr: bool) -> Self {
         Self {
             process_id,
             shard_id,
+            nfr,
             clocks: common::new(),
         }
     }
@@ -202,7 +204,8 @@ mod tests {
     fn bump_test() {
         let process_id = 1;
         let shard_id = 0;
-        let mut clocks = LockedKeyClocks::new(process_id, shard_id);
+        let nfr = false;
+        let mut clocks = LockedKeyClocks::new(process_id, shard_id, nfr);
 
         // create rifl
         let client_id = 1;

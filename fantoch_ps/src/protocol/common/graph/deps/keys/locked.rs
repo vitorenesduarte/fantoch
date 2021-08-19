@@ -10,17 +10,17 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct LockedKeyDeps {
     shard_id: ShardId,
-    deps_nfr: bool,
+    nfr: bool,
     latest: Arc<SharedMap<Key, RwLock<LatestRWDep>>>,
     latest_noop: Arc<RwLock<LatestDep>>,
 }
 
 impl KeyDeps for LockedKeyDeps {
     /// Create a new `LockedKeyDeps` instance.
-    fn new(shard_id: ShardId, deps_nfr: bool) -> Self {
+    fn new(shard_id: ShardId, nfr: bool) -> Self {
         Self {
             shard_id,
-            deps_nfr,
+            nfr,
             latest: Arc::new(SharedMap::new()),
             latest_noop: Arc::new(RwLock::new(None)),
         }
@@ -86,6 +86,12 @@ impl LockedKeyDeps {
 
         // flag indicating whether the command is read-only
         let read_only = cmd.read_only();
+        // we only support single-key read commands with NFR
+        assert!(if self.nfr && read_only {
+            cmd.total_key_count() == 1
+        } else {
+            true
+        });
 
         // iterate through all command keys, grab a write lock, get their
         // current latest and set ourselves to be the new latest
@@ -95,7 +101,7 @@ impl LockedKeyDeps {
             // grab a write lock
             let mut guard = entry.write();
 
-            super::maybe_add_deps(read_only, self.deps_nfr, &guard, &mut deps);
+            super::maybe_add_deps(read_only, self.nfr, &guard, &mut deps);
 
             // finally, store the command
             if read_only {
@@ -169,7 +175,7 @@ impl LockedKeyDeps {
             // grab a read lock
             let guard = entry.read();
 
-            super::maybe_add_deps(read_only, self.deps_nfr, &guard, deps);
+            super::maybe_add_deps(read_only, self.nfr, &guard, deps);
         });
     }
 }

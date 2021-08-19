@@ -147,26 +147,50 @@ where
 pub type ProtocolMetrics = Metrics<ProtocolMetricsKind>;
 
 impl ProtocolMetrics {
+    pub fn fast_paths(&self) -> u64 {
+        self.metric(ProtocolMetricsKind::FastPath)
+    }
+
+    pub fn slow_paths(&self) -> u64 {
+        self.metric(ProtocolMetricsKind::SlowPath)
+    }
+
+    pub fn fast_paths_reads(&self) -> u64 {
+        self.metric(ProtocolMetricsKind::FastPathReads)
+    }
+
+    pub fn slow_paths_reads(&self) -> u64 {
+        self.metric(ProtocolMetricsKind::SlowPathReads)
+    }
+
+    pub fn stable(&self) -> u64 {
+        self.metric(ProtocolMetricsKind::Stable)
+    }
+
     /// Returns a tuple containing the number of fast paths, the number of slow
     /// paths and the percentage of fast paths.
-    pub fn fast_path_data(&self) -> (u64, u64, f64) {
-        let fast_path = self
-            .get_aggregated(ProtocolMetricsKind::FastPath)
-            .cloned()
-            .unwrap_or_default();
-        let slow_path = self
-            .get_aggregated(ProtocolMetricsKind::SlowPath)
-            .cloned()
-            .unwrap_or_default();
+    pub fn fast_path_stats(&self) -> (u64, u64, f64) {
+        let fast_path = self.fast_paths();
+        let slow_path = self.slow_paths();
         let fp_rate = (fast_path * 100) as f64 / (fast_path + slow_path) as f64;
         (fast_path, slow_path, fp_rate)
+    }
+
+    fn metric(&self, metric: ProtocolMetricsKind) -> u64 {
+        self.get_aggregated(metric).cloned().unwrap_or_default()
     }
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolMetricsKind {
+    /// fast paths of all commands
     FastPath,
+    /// slow paths of all commands
     SlowPath,
+    /// fast paths of read only commands
+    FastPathReads,
+    /// slow paths of read only commands
+    SlowPathReads,
     Stable,
     CommitLatency,
     WaitConditionDelay,
@@ -179,6 +203,8 @@ impl Debug for ProtocolMetricsKind {
         match self {
             ProtocolMetricsKind::FastPath => write!(f, "fast_path"),
             ProtocolMetricsKind::SlowPath => write!(f, "slow_path"),
+            ProtocolMetricsKind::FastPathReads => write!(f, "fast_path_reads"),
+            ProtocolMetricsKind::SlowPathReads => write!(f, "slow_path_reads"),
             ProtocolMetricsKind::Stable => write!(f, "stable"),
             ProtocolMetricsKind::CommitLatency => {
                 write!(f, "commit_latency")

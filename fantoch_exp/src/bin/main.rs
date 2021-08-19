@@ -45,12 +45,13 @@ const SEND_DETACHED_INTERVAL: Duration = Duration::from_millis(5);
 // clients config
 const COMMANDS_PER_CLIENT_WAN: usize = 500;
 const COMMANDS_PER_CLIENT_LAN: usize = 5_000;
+const TOTAL_KEYS_PER_SHARD: usize = 1_000_000;
 
 // batching config
 const BATCH_MAX_DELAY: Duration = Duration::from_millis(5);
 
 // fantoch run config
-const BRANCH: &str = "main";
+const BRANCH: &str = "nfr";
 
 // tracing max log level: compile-time level should be <= run-time level
 const MAX_LEVEL_COMPILE_TIME: tracing::Level = tracing::Level::INFO;
@@ -79,6 +80,11 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
 ];
 
 macro_rules! config {
+    ($n:expr, $f:expr, $nfr:expr) => {{
+        let mut config = config!($n, $f, false, None, false, EXECUTE_AT_COMMIT);
+        config.set_nfr($nfr);
+        config
+    }};
     ($n:expr, $f:expr, $tiny_quorums:expr, $clock_bump_interval:expr, $skip_fast_ack:expr) => {{
         config!(
             $n,
@@ -111,12 +117,136 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    fast_path_plot().await
+    nfr_plot().await
+    // fast_path_plot().await
     // fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
     // batching_plot().await
     // increasing_sites_plot().await
     // partial_replication_plot().await
+}
+
+#[allow(dead_code)]
+async fn nfr_plot() -> Result<(), Report> {
+    // folder where all results will be stored
+    let results_dir = "../results_nfr";
+
+    let regions = vec![
+        Region::EuWest1,
+        Region::UsWest1,
+        Region::ApSoutheast1,
+        Region::CaCentral1,
+        Region::SaEast1,
+        Region::ApEast1,
+        Region::UsEast1,
+        Region::ApNortheast1,
+        Region::EuNorth1,
+        Region::ApSouth1,
+        Region::UsWest2,
+    ];
+    let ns = vec![7];
+    let nfrs = vec![false, true];
+
+    // pair of protocol and whether it provides configurable fault-tolerance
+    let protocols = vec![
+        (Protocol::TempoAtomic, true),
+        (Protocol::AtlasLocked, true),
+        (Protocol::EPaxosLocked, false),
+    ];
+
+    let clients_per_region = vec![256];
+    let batch_max_sizes = vec![1];
+
+    let shard_count = 1;
+    let keys_per_command = 1;
+    let payload_size = 100;
+    let cpus = 12;
+
+    let key_gen = KeyGen::Zipf {
+        total_keys_per_shard: TOTAL_KEYS_PER_SHARD,
+        coefficient: 0.99,
+    };
+    let read_only_percentages = vec![20, 50, 80, 100];
+
+    let mut workloads = Vec::new();
+    for read_only_percentage in read_only_percentages {
+        let mut workload = Workload::new(
+            shard_count,
+            key_gen,
+            keys_per_command,
+            COMMANDS_PER_CLIENT_WAN,
+            payload_size,
+        );
+        workload.set_read_only_percentage(read_only_percentage);
+        workloads.push(workload);
+    }
+
+    let mut skip = |_, _, _| false;
+
+    let mut all_configs = Vec::new();
+    for n in ns {
+        // take the first n regions
+        let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
+        assert_eq!(regions.len(), n);
+
+        // create configs
+        let mut configs = Vec::new();
+        for nfr in nfrs.clone() {
+            for (protocol, configurable_f) in protocols.clone() {
+                if configurable_f {
+                    for f in vec![1, 2] {
+                        configs.push((protocol, n, f, nfr));
+                    }
+                } else {
+                    let minority = n / 2;
+                    configs.push((protocol, n, minority, nfr));
+                }
+            }
+        }
+        println!("n = {}", n);
+        println!("{:#?}", configs);
+
+        let mut configs: Vec<_> = configs
+            .into_iter()
+            .map(|(protocol, n, f, nfr)| (protocol, config!(n, f, nfr)))
+            .collect();
+
+        // set shards in each config
+        configs.iter_mut().for_each(|(_protocol, config)| {
+            config.set_shard_count(shard_count)
+        });
+
+        all_configs.push((configs, regions));
+    }
+
+    let total_config_count: usize =
+        all_configs.iter().map(|(configs, _)| configs.len()).sum();
+    let mut progress = TracingProgressBar::init(
+        (workloads.len()
+            * clients_per_region.len()
+            * total_config_count
+            * batch_max_sizes.len()) as u64,
+    );
+
+    for (configs, regions) in all_configs {
+        // create AWS planet
+        let planet = Some(Planet::from(LATENCY_AWS));
+        baremetal_bench(
+            regions,
+            shard_count,
+            planet,
+            configs,
+            clients_per_region.clone(),
+            workloads.clone(),
+            batch_max_sizes.clone(),
+            cpus,
+            &mut skip,
+            &mut progress,
+            results_dir,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -135,7 +265,7 @@ async fn fast_path_plot() -> Result<(), Report> {
     ];
     let ns = vec![5, 7];
 
-    let clients_per_region = vec![1, 16, 64, 256, 1024];
+    let clients_per_region = vec![1, 16];
     let batch_max_sizes = vec![1];
 
     let shard_count = 1;
@@ -432,7 +562,7 @@ async fn partial_replication_plot() -> Result<(), Report> {
         // tempo:
         for read_only_percentage in vec![0] {
             let key_gen = KeyGen::Zipf {
-                total_keys_per_shard: 1_000_000,
+                total_keys_per_shard: TOTAL_KEYS_PER_SHARD,
                 coefficient,
             };
             let mut workload = Workload::new(

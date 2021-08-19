@@ -58,7 +58,8 @@ impl KVStore {
     ) -> Vec<KVOpResult> {
         // update monitor, if we're monitoring
         if let Some(monitor) = self.monitor.as_mut() {
-            monitor.add(&key, rifl);
+            let read_only = ops.iter().all(|op| op == &KVOp::Get);
+            monitor.add(&key, read_only, rifl);
         }
         self.do_execute(key, ops)
     }

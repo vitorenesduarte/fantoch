@@ -17,7 +17,12 @@ impl ExecutionOrderMonitor {
     }
 
     /// Adds a new command to the monitor.
-    pub fn add(&mut self, key: &Key, rifl: Rifl) {
+    /// Read-only commandds are ignored.
+    pub fn add(&mut self, key: &Key, read_only: bool, rifl: Rifl) {
+        if read_only {
+            return;
+        }
+
         if let Some(current) = self.order_per_key.get_mut(key) {
             current.push(rifl);
         } else {

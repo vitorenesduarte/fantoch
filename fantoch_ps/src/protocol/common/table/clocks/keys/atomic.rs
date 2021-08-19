@@ -13,12 +13,13 @@ use std::sync::Arc;
 pub struct AtomicKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
+    nfr: bool,
     clocks: Arc<SharedMap<Key, AtomicU64>>,
 }
 
 impl KeyClocks for AtomicKeyClocks {
     /// Create a new `AtomicKeyClocks` instance.
-    fn new(process_id: ProcessId, shard_id: ShardId) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId, nfr: bool) -> Self {
         // create shared clocks
         let clocks = SharedMap::new();
         // wrap them in an arc
@@ -26,6 +27,7 @@ impl KeyClocks for AtomicKeyClocks {
 
         Self {
             process_id,
+            nfr,
             shard_id,
             clocks,
         }
@@ -40,13 +42,21 @@ impl KeyClocks for AtomicKeyClocks {
     }
 
     fn proposal(&mut self, cmd: &Command, min_clock: u64) -> (u64, Votes) {
+        // if NFR with a read-only single-key command, then don't bump the clock
+        let should_not_bump = self.nfr && cmd.nfr_allowed();
+        let next_clock = |min_clock, current_clock| {
+            if should_not_bump {
+                cmp::max(min_clock, current_clock)
+            } else {
+                cmp::max(min_clock, current_clock + 1)
+            }
+        };
+
         // first round of votes:
         // - vote on each key and compute the highest clock seen
         // - this means that if we have more than one key, then we don't
         //   necessarily end up with all key clocks equal
-        // OPTIMIZATION: keep track of the highest bumped-to value; if we have
-        // to iterate in a way that the highest clock is iterated first, this
-        // will be almost equivalent to `LockedKeyClocks`
+        // OPTIMIZATION: keep track of the highest bumped-to value;
 
         let key_count = cmd.key_count(self.shard_id);
         let mut clocks = HashSet::with_capacity(key_count);
@@ -55,26 +65,28 @@ impl KeyClocks for AtomicKeyClocks {
         cmd.keys(self.shard_id).for_each(|key| {
             // bump the `key` clock
             let clock = self.clocks.get_or(key, || AtomicU64::default());
-            let previous_value = Self::bump(&clock, up_to);
+            let bump =
+                Self::maybe_bump_fn(self.process_id, &clock, |current_clock| {
+                    next_clock(up_to, current_clock)
+                });
 
-            // create vote range and save it
-            up_to = cmp::max(up_to, previous_value + 1);
-            let vr = VoteRange::new(self.process_id, previous_value + 1, up_to);
-            votes.set(key.clone(), vec![vr]);
+            if let Some(vr) = bump {
+                up_to = cmp::max(up_to, vr.end());
+                votes.set(key.clone(), vec![vr]);
+            }
 
             // save final clock value
             clocks.insert(up_to);
         });
 
         // second round of votes:
-        // - if not all clocks match (i.e. we didn't get a result equivalent to
-        //   `LockedKeyClocks`), try to make them match
+        // - if not all clocks match, try to make them match
         if clocks.len() > 1 {
             cmd.keys(self.shard_id).for_each(|key| {
                 let clock = self.clocks.get_or(key, || AtomicU64::default());
-                if let Some(vr) =
-                    Self::maybe_bump(self.process_id, &clock, up_to)
-                {
+                let bump = Self::maybe_bump(self.process_id, &clock, up_to);
+
+                if let Some(vr) = bump {
                     votes.add(key, vr);
                 }
             })
@@ -108,36 +120,40 @@ impl KeyClocks for AtomicKeyClocks {
 }
 
 impl AtomicKeyClocks {
-    // Bump the clock to at least `min_clock`.
-    fn bump(clock: &AtomicU64, min_clock: u64) -> u64 {
-        let fetch_update =
-            clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                Some(cmp::max(min_clock, value + 1))
-            });
-        match fetch_update {
-            Ok(previous_value) => previous_value,
-            Err(_) => {
-                panic!("atomic bump should always succeed");
-            }
-        }
+    // Bump the clock to at least `next_clock`.
+    #[must_use]
+    fn maybe_bump_fn<F>(
+        id: ProcessId,
+        clock: &AtomicU64,
+        next_clock: F,
+    ) -> Option<VoteRange>
+    where
+        F: FnOnce(u64) -> u64 + Copy,
+    {
+        let fetch_update = clock.fetch_update(
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+            |current| {
+                let next = next_clock(current);
+                if current < next {
+                    Some(next)
+                } else {
+                    None
+                }
+            },
+        );
+        fetch_update.ok().map(|previous_value| {
+            VoteRange::new(id, previous_value + 1, next_clock(previous_value))
+        })
     }
 
     // Bump the clock to `up_to` if lower than `up_to`.
+    #[must_use]
     fn maybe_bump(
         id: ProcessId,
         clock: &AtomicU64,
         up_to: u64,
     ) -> Option<VoteRange> {
-        let fetch_update =
-            clock.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                if value < up_to {
-                    Some(up_to)
-                } else {
-                    None
-                }
-            });
-        fetch_update
-            .ok()
-            .map(|previous_value| VoteRange::new(id, previous_value + 1, up_to))
+        Self::maybe_bump_fn(id, clock, |_| up_to)
     }
 }
