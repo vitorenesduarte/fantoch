@@ -86,7 +86,7 @@ impl QuorumDeps {
                 // we have equal deps if:
                 // - dependencies are reported the same number of times
                 // - their report count is equal to the number of fast quorum
-                //   processes
+                //   processes (i.e. every process reported every dependency)
                 counts
                     .into_iter()
                     .next()

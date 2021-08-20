@@ -449,6 +449,15 @@ where
             fast_path_ratios.push(fast_path_ratio as i64);
         }
 
+        println!(
+            "{:<7} n = {} f = {:?} c = {} | {:?}",
+            PlotFmt::protocol_name(search.protocol),
+            search.n,
+            search.f,
+            clients_per_region,
+            fast_path_ratios,
+        );
+
         // plot it! (if there's something to be plotted)
         if !fast_path_ratios.is_empty() {
             let kwargs = line_style(py, search, &style_fun)?;

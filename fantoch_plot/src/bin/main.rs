@@ -34,9 +34,9 @@ fn main() -> Result<(), Report> {
 #[allow(dead_code)]
 fn thesis() -> Result<(), Report> {
     // eurosys()?;
-    nfr_plot()?;
+    fast_path_plot()?;
     // increasing_sites_plot()?;
-    // fast_path_plot()?;
+    // nfr_plot()?;
     Ok(())
 }
 
@@ -53,7 +53,7 @@ fn eurosys() -> Result<(), Report> {
 #[allow(dead_code)]
 fn nfr_plot() -> Result<(), Report> {
     println!(">>>>>>>> NFR <<<<<<<<");
-    let results_dir = "../results_nfr";
+    let results_dir = "/home/vitor.enes/thesis_results/results_nfr";
     // fixed parameters
     let key_gen = KeyGen::Zipf {
         total_keys_per_shard: 1_000_000,
@@ -106,7 +106,7 @@ fn fast_path_plot() -> Result<(), Report> {
     let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
     let payload_size = 100;
     let batch_max_size = 1;
-    let clients_per_region = vec![1, 16];
+    let clients_per_region = vec![1, 8];
 
     let search_refine = |search: &mut Search,
                          clients_per_region: usize,

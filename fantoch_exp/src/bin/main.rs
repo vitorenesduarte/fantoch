@@ -117,12 +117,12 @@ macro_rules! config {
 
 #[tokio::main]
 async fn main() -> Result<(), Report> {
-    nfr_plot().await
-    // fast_path_plot().await
+    fast_path_plot().await
     // fairness_and_tail_latency_plot().await
     // increasing_load_plot().await
     // batching_plot().await
     // increasing_sites_plot().await
+    // nfr_plot().await
     // partial_replication_plot().await
 }
 
@@ -265,7 +265,7 @@ async fn fast_path_plot() -> Result<(), Report> {
     ];
     let ns = vec![5, 7];
 
-    let clients_per_region = vec![1, 16];
+    let clients_per_region = vec![1, 8];
     let batch_max_sizes = vec![1];
 
     let shard_count = 1;
