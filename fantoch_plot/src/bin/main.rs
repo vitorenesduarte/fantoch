@@ -7,7 +7,10 @@ use fantoch_plot::{
     ErrorBar, ExperimentData, HeatmapMetric, LatencyMetric, LatencyPrecision,
     MetricsType, PlotFmt, ResultsDB, Search, Style, ThroughputYAxis,
 };
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
 
 // latency dir
 // const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
@@ -34,9 +37,10 @@ fn main() -> Result<(), Report> {
 #[allow(dead_code)]
 fn thesis() -> Result<(), Report> {
     // eurosys()?;
-    fast_path_plot()?;
+    // fast_path_plot()?;
     // increasing_sites_plot()?;
     // nfr_plot()?;
+    recovery_plot()?;
     Ok(())
 }
 
@@ -48,6 +52,65 @@ fn eurosys() -> Result<(), Report> {
     batching_plot()?;
     partial_replication_plot()?;
     Ok(())
+}
+
+#[derive(Default)]
+struct RecoveryData {
+    taiwan: Vec<u64>,
+    finland: Vec<u64>,
+    south_carolina: Vec<u64>,
+    total: Vec<u64>,
+}
+
+#[allow(dead_code)]
+fn recovery_plot() -> Result<(), Report> {
+    println!(">>>>>>>> RECOVERY <<<<<<<<");
+
+    let atlas_data = recovery_data("eurosys20_data/recovery/atlas.dat")?;
+    let fpaxos_data = recovery_data("eurosys20_data/recovery/fpaxos.dat")?;
+    let taiwan = (atlas_data.taiwan, fpaxos_data.taiwan);
+    let finland = (atlas_data.finland, fpaxos_data.finland);
+    let south_carolina =
+        (atlas_data.south_carolina, fpaxos_data.south_carolina);
+    let total = (atlas_data.total, fpaxos_data.total);
+
+    let path = String::from("plot_recovery.pdf");
+    fantoch_plot::recovery_plot(
+        taiwan,
+        finland,
+        south_carolina,
+        total,
+        PLOT_DIR,
+        &path,
+    )?;
+
+    Ok(())
+}
+
+fn recovery_data(path: &str) -> Result<RecoveryData, Report> {
+    #[derive(Debug, Deserialize)]
+    struct Record {
+        time: u64,
+        taiwan: u64,
+        finland: u64,
+        south_carolina: u64,
+        total: u64,
+    }
+
+    let file = File::open(path)?;
+    let buf = BufReader::new(file);
+    let mut rdr = csv::ReaderBuilder::new().delimiter(b' ').from_reader(buf);
+    let mut recovery_data = RecoveryData::default();
+
+    for result in rdr.deserialize() {
+        let record: Record = result?;
+        recovery_data.taiwan.push(record.taiwan);
+        recovery_data.finland.push(record.finland);
+        recovery_data.south_carolina.push(record.south_carolina);
+        recovery_data.total.push(record.total);
+    }
+
+    Ok(recovery_data)
 }
 
 #[allow(dead_code)]

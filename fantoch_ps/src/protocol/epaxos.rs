@@ -279,7 +279,8 @@ impl<KD: KeyDeps> EPaxos<KD> {
         // update command info
         info.status = Status::COLLECT;
         // See EPaxosInfo::new for the reason why the `-1` is needed
-        info.quorum_deps.maybe_adjust_fast_quorum_size(quorum.len() - 1);
+        info.quorum_deps
+            .maybe_adjust_fast_quorum_size(quorum.len() - 1);
         info.quorum = quorum;
         info.cmd = Some(cmd);
         // create and set consensus value

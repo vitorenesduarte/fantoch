@@ -182,6 +182,103 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
+pub fn recovery_plot(
+    taiwan: (Vec<u64>, Vec<u64>),
+    finland: (Vec<u64>, Vec<u64>),
+    south_carolina: (Vec<u64>, Vec<u64>),
+    all_sites: (Vec<u64>, Vec<u64>),
+    output_dir: Option<&str>,
+    output_file: &str,
+) -> Result<(), Report> {
+    // start python
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let plt = PyPlot::new(py)?;
+
+    // start plot:
+    // - adjust height space and width space between plots
+    let kwargs = pydict!(py, ("hspace", 0.5), ("wspace", 0.2));
+    let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
+
+    // increase width and height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width + 1.5, height + 1.5)?;
+
+    // the number of plotted protocols will be 2
+    let plotted = 2;
+
+    // the xrange is fixed
+    let x_range = (10, 70);
+    // the yrange depends on whether we have all sites or not
+    let y_range = |subplot_title| {
+        if subplot_title == "all sites" {
+            (0, 3000)
+        } else {
+            (0, 1200)
+        }
+    };
+
+    for (subplot, (atlas_data, fpaxos_data), subplot_title) in vec![
+        (1, taiwan, "Taiwan"),
+        (2, finland, "Finland"),
+        (3, south_carolina, "South Carolina"),
+        (4, all_sites, "all sites"),
+    ] {
+        let ax = plt.subplot(2, 2, subplot, None)?;
+
+        // set title
+        ax.set_title(subplot_title)?;
+
+        for (search, y) in vec![
+            (Search::new(3, 1, Protocol::AtlasLocked), atlas_data),
+            (Search::new(3, 1, Protocol::FPaxos), fpaxos_data),
+        ] {
+            let x: Vec<_> = (1..=y.len()).collect();
+            // plot it!
+            let kwargs = line_style(py, search, &None)?;
+            ax.plot(x, y, None, Some(kwargs))?;
+        }
+
+        // set x limits
+        let (x_min, x_max) = x_range;
+        let kwargs = pydict!(py, ("xmin", x_min), ("xmax", x_max));
+        ax.set_xlim(Some(kwargs))?;
+
+        // set y limits
+        let (y_min, y_max) = y_range(subplot_title);
+        let kwargs = pydict!(py, ("ymin", y_min), ("ymax", y_max));
+        ax.set_ylim(Some(kwargs))?;
+
+        // set legend only in the first plot
+        if subplot == 1 {
+            // specific pull-up for this kind of plot
+            let x_bbox_to_anchor = Some(1.01);
+            let y_bbox_to_anchor = Some(1.51);
+            add_legend(
+                plotted,
+                None,
+                x_bbox_to_anchor,
+                y_bbox_to_anchor,
+                None,
+                py,
+                &ax,
+            )?;
+        }
+        // set labels
+        if subplot == 1 || subplot == 3 {
+            ax.set_ylabel("throughput (K ops/s)", None)?;
+        }
+        if subplot == 3 || subplot == 4 {
+            ax.set_xlabel("time (s)", None)?;
+        }
+    }
+
+    // end plot
+    end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
+
+    Ok(())
+}
+
 pub fn nfr_plot(
     n: usize,
     read_only_percentages: Vec<usize>,
@@ -648,6 +745,37 @@ pub fn increasing_sites_plot(
             // this represents the height of the error bar starting at the
             // top of the bar
             to_err.push(error_bar);
+
+            let regions = vec![
+                "eu-west-1",
+                "us-west-1",
+                "ap-southeast-1",
+                "ca-central-1",
+                "sa-east-1",
+                "ap-east-1",
+                "us-east-1",
+                "ap-northeast-1",
+                "eu-north-1",
+                "ap-south-1",
+                "us-west-2",
+            ];
+
+            let per_site = exp_data
+                .client_latency
+                .iter()
+                .map(|(region, histogram)| {
+                    let avg = histogram.mean(latency_precision).round() as u64;
+                    (region.name(), avg)
+                })
+                .collect::<HashMap<_, _>>();
+            let mut per_site_fmt = String::new();
+            for region in regions {
+                if let Some(avg) = per_site.get(&region.to_string()) {
+                    per_site_fmt =
+                        format!("{} {} {:>3} |", per_site_fmt, region, avg);
+                }
+            }
+            println!("n = {:<2} |{}", n, per_site_fmt);
         }
 
         println!(
@@ -1790,7 +1918,7 @@ where
     let plt = PyPlot::new(py)?;
 
     // start plot:
-    // - adjust horizontal space between the three plots
+    // - adjust height space between plots
     let kwargs = pydict!(py, ("hspace", 0.2));
     if let Some(left_margin) = left_margin {
         pytry!(py, kwargs.set_item("left", left_margin));
