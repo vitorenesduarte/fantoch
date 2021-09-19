@@ -39,8 +39,8 @@ fn thesis() -> Result<(), Report> {
     // eurosys()?;
     // fast_path_plot()?;
     // increasing_sites_plot()?;
-    // nfr_plot()?;
-    recovery_plot()?;
+    nfr_plot()?;
+    // recovery_plot()?;
     Ok(())
 }
 

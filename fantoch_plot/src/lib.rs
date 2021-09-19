@@ -365,6 +365,8 @@ pub fn nfr_plot(
             let f = f.unwrap_or(n / 2);
 
             let mut y = Vec::new();
+            let mut fast_path_ratios = Vec::new();
+
             for read_only_percentage in read_only_percentages.clone() {
                 let mut search = Search::new(n, f, protocol);
                 // filter by key gen, clients per region and payload size
@@ -405,6 +407,11 @@ pub fn nfr_plot(
                 let histogram = &exp_data.global_client_latency;
                 let avg = histogram.mean(latency_precision).round() as u64;
                 y.push(avg);
+
+                // gather fast path ratios
+                let (_, _, fast_path_ratio) =
+                    exp_data.global_protocol_metrics.fast_path_stats();
+                fast_path_ratios.push(fast_path_ratio as i64);
             }
 
             println!(
@@ -413,6 +420,14 @@ pub fn nfr_plot(
                 f,
                 nfr,
                 y,
+            );
+
+            println!(
+                "[FP%] {:<7} f = {:?} nfr = {} | {:?}",
+                PlotFmt::protocol_name(protocol),
+                f,
+                nfr,
+                fast_path_ratios,
             );
 
             // compute x: shift all values by `shift`
