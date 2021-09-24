@@ -1900,7 +1900,7 @@ pub fn batching_plot(
     Ok(())
 }
 
-pub fn throughput_latency_plot_split<GInput, G, RInput, R>(
+pub fn throughput_something_plot_split<GInput, G, RInput, R>(
     n: usize,
     search_gen_inputs: Vec<GInput>,
     search_gen: G,
@@ -1912,6 +1912,7 @@ pub fn throughput_latency_plot_split<GInput, G, RInput, R>(
     latency_precision: LatencyPrecision,
     x_range: Option<(f64, f64)>,
     y_range: Option<(f64, f64)>,
+    y_axis: ThroughputYAxis,
     y_log_scale: bool,
     x_bbox_to_anchor: Option<f64>,
     legend_column_spacing: Option<f64>,
@@ -1975,7 +1976,7 @@ where
             clients_per_region.clone(),
             x_range,
             y_range,
-            ThroughputYAxis::Latency(LatencyMetric::Average),
+            y_axis,
             db,
             &mut plotted,
         )?;

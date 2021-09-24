@@ -36,20 +36,20 @@ fn main() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn thesis() -> Result<(), Report> {
-    // eurosys()?;
+    eurosys()?;
     // fast_path_plot()?;
     // increasing_sites_plot()?;
-    nfr_plot()?;
+    // nfr_plot()?;
     // recovery_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    fairness_plot()?;
-    tail_latency_plot()?;
-    increasing_load_plot()?;
-    batching_plot()?;
+    // fairness_plot()?;
+    // tail_latency_plot()?;
+    // increasing_load_plot()?;
+    // batching_plot()?;
     partial_replication_plot()?;
     Ok(())
 }
@@ -550,13 +550,14 @@ fn increasing_load_plot() -> Result<(), Report> {
     let latency_precision = LatencyPrecision::Millis;
     let x_range = None;
     let y_range = Some((100.0, 1500.0));
+    let y_axis = ThroughputYAxis::Latency(LatencyMetric::Average);
     let y_log_scale = true;
     let x_bbox_to_anchor = Some(0.46);
     let legend_column_spacing = Some(1.25);
     let left_margin = None;
     let width_reduction = None;
     let path = String::from("plot_increasing_load.pdf");
-    fantoch_plot::throughput_latency_plot_split(
+    fantoch_plot::throughput_something_plot_split(
         n,
         protocols,
         search_gen,
@@ -568,6 +569,7 @@ fn increasing_load_plot() -> Result<(), Report> {
         latency_precision,
         x_range,
         y_range,
+        y_axis,
         y_log_scale,
         x_bbox_to_anchor,
         legend_column_spacing,
@@ -680,33 +682,36 @@ fn batching_plot() -> Result<(), Report> {
         let latency_precision = LatencyPrecision::Millis;
         let x_range = None;
         let y_range = Some((100.0, 2000.0));
+        let y_axis = ThroughputYAxis::Latency(LatencyMetric::Average);
         let y_log_scale = true;
         let x_bbox_to_anchor = None;
         let legend_column_spacing = None;
         let left_margin = None;
         let width_reduction = None;
         let path = format!("plot_batching_{}_{}.pdf", batching, payload_size);
-        let (max_throughputs, _) = fantoch_plot::throughput_latency_plot_split(
-            n,
-            protocols.clone(),
-            search_gen,
-            clients_per_region.clone(),
-            key_gen,
-            empty_key_gen,
-            search_refine,
-            style_fun,
-            latency_precision,
-            x_range,
-            y_range,
-            y_log_scale,
-            x_bbox_to_anchor,
-            legend_column_spacing,
-            left_margin,
-            width_reduction,
-            PLOT_DIR,
-            &path,
-            &db,
-        )?;
+        let (max_throughputs, _) =
+            fantoch_plot::throughput_something_plot_split(
+                n,
+                protocols.clone(),
+                search_gen,
+                clients_per_region.clone(),
+                key_gen,
+                empty_key_gen,
+                search_refine,
+                style_fun,
+                latency_precision,
+                x_range,
+                y_range,
+                y_axis,
+                y_log_scale,
+                x_bbox_to_anchor,
+                legend_column_spacing,
+                left_margin,
+                width_reduction,
+                PLOT_DIR,
+                &path,
+                &db,
+            )?;
         for (search, max_throughput) in max_throughputs {
             let name = match search.protocol {
                 Protocol::FPaxos => "fpaxos",
@@ -880,58 +885,76 @@ fn partial_replication_plot() -> Result<(), Report> {
     // load results
     let db = ResultsDB::load(results_dir).wrap_err("load results")?;
 
-    for (shard_count, keys_per_command, x_range) in vec![
-        (1, 2, Some((0.0, 400.0))),
-        (2, 2, Some((0.0, 400.0))),
-        (4, 2, Some((0.0, 700.0))),
-        (6, 2, Some((0.0, 1000.0))),
+    for (y_axis, y_range) in vec![
+        (
+            ThroughputYAxis::Latency(LatencyMetric::Average),
+            Some((150.0, 310.0)),
+        ),
+        (
+            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.99)),
+            Some((150.0, 810.0)),
+        ),
+        (
+            ThroughputYAxis::Latency(LatencyMetric::Percentile(0.999)),
+            Some((150.0, 810.0)),
+        ),
     ] {
-        let search_refine = |search: &mut Search, coefficient: f64| {
-            let key_gen = KeyGen::Zipf {
-                coefficient,
-                total_keys_per_shard: 1_000_000,
+        for (shard_count, keys_per_command, x_range) in vec![
+            (1, 2, Some((0.0, 400.0))),
+            (2, 2, Some((0.0, 400.0))),
+            (4, 2, Some((0.0, 700.0))),
+            (6, 2, Some((0.0, 1000.0))),
+        ] {
+            let search_refine = |search: &mut Search, coefficient: f64| {
+                let key_gen = KeyGen::Zipf {
+                    coefficient,
+                    total_keys_per_shard: 1_000_000,
+                };
+                search
+                    .key_gen(key_gen)
+                    .shard_count(shard_count)
+                    .keys_per_command(keys_per_command)
+                    .payload_size(payload_size);
             };
-            search
-                .key_gen(key_gen)
-                .shard_count(shard_count)
-                .keys_per_command(keys_per_command)
-                .payload_size(payload_size);
-        };
 
-        let latency_precision = LatencyPrecision::Millis;
-        let y_range = Some((140.0, 610.0));
-        let y_log_scale = false;
-        let x_bbox_to_anchor = Some(0.45);
-        let legend_column_spacing = None;
-        let left_margin = Some(0.15);
-        let width_reduction = Some(1.75);
-        let path = format!(
-            "plot_partial_replication_{}_k{}.pdf",
-            shard_count, keys_per_command
-        );
-        let style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>> =
-            Some(Box::new(style_fun));
-        fantoch_plot::throughput_latency_plot_split(
-            n,
-            protocols.clone(),
-            search_gen,
-            clients_per_region.clone(),
-            top_coefficient,
-            bottom_coefficient,
-            search_refine,
-            style_fun,
-            latency_precision,
-            x_range,
-            y_range,
-            y_log_scale,
-            x_bbox_to_anchor,
-            legend_column_spacing,
-            left_margin,
-            width_reduction,
-            PLOT_DIR,
-            &path,
-            &db,
-        )?;
+            let latency_precision = LatencyPrecision::Millis;
+            let y_log_scale = false;
+            let x_bbox_to_anchor = Some(0.45);
+            let legend_column_spacing = None;
+            let left_margin = Some(0.15);
+            let width_reduction = Some(1.75);
+            let path = format!(
+                "plot_partial_replication_{}_{}_k{}.pdf",
+                y_axis.name(),
+                shard_count,
+                keys_per_command
+            );
+            let style_fun: Option<
+                Box<dyn Fn(&Search) -> HashMap<Style, String>>,
+            > = Some(Box::new(style_fun));
+            fantoch_plot::throughput_something_plot_split(
+                n,
+                protocols.clone(),
+                search_gen,
+                clients_per_region.clone(),
+                top_coefficient,
+                bottom_coefficient,
+                search_refine,
+                style_fun,
+                latency_precision,
+                x_range,
+                y_range,
+                y_axis,
+                y_log_scale,
+                x_bbox_to_anchor,
+                legend_column_spacing,
+                left_margin,
+                width_reduction,
+                PLOT_DIR,
+                &path,
+                &db,
+            )?;
+        }
     }
 
     // create searches
