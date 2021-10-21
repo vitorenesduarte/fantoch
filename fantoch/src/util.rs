@@ -10,18 +10,18 @@ use std::hash::{Hash, Hasher};
 
 #[macro_export]
 macro_rules! warn {
-    ($( $args:expr ),*) => { tracing::warn!( $( $args ),* ); }
+    ($( $args:expr ),*) => { tracing::warn!( $( $args ),* ) }
 }
 
 #[macro_export]
 macro_rules! info {
-    ($( $args:expr ),*) => { tracing::info!( $( $args ),* ); }
+    ($( $args:expr ),*) => { tracing::info!( $( $args ),* ) }
 }
 
 #[macro_export]
 #[cfg(any(feature = "max_level_debug", feature = "max_level_trace"))]
 macro_rules! debug {
-    ($( $args:expr ),*) => { tracing::debug!( $( $args ),* ); }
+    ($( $args:expr ),*) => { tracing::debug!( $( $args ),* ) }
 }
 
 #[macro_export]
@@ -36,7 +36,7 @@ macro_rules! debug {
 #[macro_export]
 #[cfg(feature = "max_level_trace")]
 macro_rules! trace {
-    ($( $args:expr ),*) => { tracing::trace!( $( $args ),* ); }
+    ($( $args:expr ),*) => { tracing::trace!( $( $args ),* ) }
 }
 
 #[macro_export]
