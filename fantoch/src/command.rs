@@ -180,7 +180,7 @@ impl Command {
         self.shard_to_ops
             .remove(&shard_id)
             .map(|shard_ops| shard_ops.into_iter())
-            .unwrap_or_else(|| { let _ = &self; self._empty_keys.into_iter() })
+            .unwrap_or_else(|| self._empty_keys.into_iter())
     }
 
     /// Checks if a command conflicts with another given command.
