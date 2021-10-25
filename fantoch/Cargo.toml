@@ -30,7 +30,7 @@ tokio = { version = "1.9.0", features = ["full", "parking_lot"], optional = true
 tokio-util = { version = "0.6.7", features = ["codec"], optional = true }
 tracing = "0.1.26"
 tracing-appender = "0.1.2"
-tracing-subscriber = "0.2.19"
+tracing-subscriber = "0.3.0"
 zipf = "7.0.0"
 
 [dev-dependencies]
