@@ -26,7 +26,7 @@ serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
 tracing = "0.1.26"
 tracing-futures = { version = "0.2.5", optional = true }
-tracing-subscriber = { version = "0.2.19", optional = true }
+tracing-subscriber = { version = "0.3.1", optional = true }
 tokio = { version = "1.9.0", features = ["full"], optional = true }
 tsunami = { version = "0.11.1", default-features = false, features = ["aws", "baremetal"], optional = true }
 
