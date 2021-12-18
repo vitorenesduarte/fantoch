@@ -149,8 +149,18 @@ impl<'a> Axes<'a> {
     pub fn get_xlim(&self) -> Result<(f64, f64), Report> {
         let xlim = pytry!(self.py(), self.ax.call_method0("get_xlim"));
         let xlim = pytry!(self.py(), xlim.downcast::<PyTuple>());
-        let left = pytry!(self.py(), xlim.get_item(0).downcast::<PyFloat>());
-        let right = pytry!(self.py(), xlim.get_item(1).downcast::<PyFloat>());
+        let left = pytry!(
+            self.py(),
+            xlim.get_item(0)
+                .expect("left xlim should be set")
+                .downcast::<PyFloat>()
+        );
+        let right = pytry!(
+            self.py(),
+            xlim.get_item(1)
+                .expect("right xlim should be set")
+                .downcast::<PyFloat>()
+        );
         Ok((left.value(), right.value()))
     }
 
@@ -162,8 +172,18 @@ impl<'a> Axes<'a> {
     pub fn get_ylim(&self) -> Result<(f64, f64), Report> {
         let xlim = pytry!(self.py(), self.ax.call_method0("get_ylim"));
         let xlim = pytry!(self.py(), xlim.downcast::<PyTuple>());
-        let left = pytry!(self.py(), xlim.get_item(0).downcast::<PyFloat>());
-        let right = pytry!(self.py(), xlim.get_item(1).downcast::<PyFloat>());
+        let left = pytry!(
+            self.py(),
+            xlim.get_item(0)
+                .expect("left ylim should be set")
+                .downcast::<PyFloat>()
+        );
+        let right = pytry!(
+            self.py(),
+            xlim.get_item(1)
+                .expect("right ylim should be set")
+                .downcast::<PyFloat>()
+        );
         Ok((left.value(), right.value()))
     }
 
