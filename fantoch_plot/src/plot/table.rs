@@ -1,7 +1,6 @@
 use crate::pytry;
 use color_eyre::Report;
 use pyo3::prelude::*;
-use pyo3::PyNativeType;
 
 // https://matplotlib.org/api/table_api.html#matplotlib.table.Table
 pub struct Table<'a> {

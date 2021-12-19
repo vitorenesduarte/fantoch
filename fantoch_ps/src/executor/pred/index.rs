@@ -1,7 +1,7 @@
 use crate::protocol::common::pred::{CaesarDeps, Clock};
 use fantoch::command::Command;
 use fantoch::hash_map::HashMap;
-use fantoch::id::{Dot, ProcessId};
+use fantoch::id::Dot;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
 use std::cell::RefCell;
@@ -63,14 +63,12 @@ impl Vertex {
 
 #[derive(Debug, Clone)]
 pub struct VertexIndex {
-    process_id: ProcessId,
     index: HashMap<Dot, RefCell<Vertex>>,
 }
 
 impl VertexIndex {
-    pub fn new(process_id: ProcessId) -> Self {
+    pub fn new() -> Self {
         Self {
-            process_id,
             index: HashMap::new(),
         }
     }

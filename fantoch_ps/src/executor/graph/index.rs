@@ -144,7 +144,6 @@ impl VertexIndex {
 
 #[derive(Debug, Clone)]
 pub struct PendingIndex {
-    process_id: ProcessId,
     shard_id: ShardId,
     config: Config,
     index: HashMap<Dot, HashSet<Dot>>,
@@ -152,12 +151,10 @@ pub struct PendingIndex {
 
 impl PendingIndex {
     pub fn new(
-        process_id: ProcessId,
         shard_id: ShardId,
         config: Config,
     ) -> Self {
         Self {
-            process_id,
             shard_id,
             config,
             index: HashMap::new(),

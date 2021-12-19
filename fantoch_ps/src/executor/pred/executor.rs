@@ -18,7 +18,6 @@ use std::sync::Arc;
 pub struct PredecessorsExecutor {
     process_id: ProcessId,
     shard_id: ShardId,
-    config: Config,
     graph: PredecessorsGraph,
     store: KVStore,
     to_clients: VecDeque<ExecutorResult>,
@@ -34,7 +33,6 @@ impl Executor for PredecessorsExecutor {
         Self {
             process_id,
             shard_id,
-            config,
             graph,
             store,
             to_clients,

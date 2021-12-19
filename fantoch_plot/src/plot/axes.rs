@@ -4,7 +4,6 @@ use crate::pytry;
 use color_eyre::Report;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFloat, PyTuple};
-use pyo3::PyNativeType;
 
 pub struct Axes<'a> {
     ax: &'a PyAny,

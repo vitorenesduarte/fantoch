@@ -54,7 +54,7 @@ impl PredecessorsGraph {
         let committed_clock = AEClock::with(ids.clone());
         let executed_clock = AEClock::with(ids.clone());
         // create indexes
-        let vertex_index = VertexIndex::new(process_id);
+        let vertex_index = VertexIndex::new();
         let phase_one_pending_index = PendingIndex::new();
         let phase_two_pending_index = PendingIndex::new();
         let metrics = ExecutorMetrics::new();

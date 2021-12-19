@@ -3,7 +3,6 @@ use crate::pytry;
 use color_eyre::Report;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use pyo3::PyNativeType;
 
 pub struct Figure<'a> {
     fig: &'a PyAny,
