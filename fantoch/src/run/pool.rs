@@ -8,7 +8,6 @@ pub trait PoolIndex {
 
 #[derive(Clone)]
 pub struct ToPool<M> {
-    name: String,
     pool: Vec<ChannelSender<M>>,
 }
 
@@ -40,7 +39,6 @@ where
             .collect();
         // create pool
         let to_pool = Self {
-            name: name.into(),
             pool,
         };
         (to_pool, rxs)

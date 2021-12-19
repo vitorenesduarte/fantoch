@@ -90,6 +90,7 @@ fn recovery_plot() -> Result<(), Report> {
 fn recovery_data(path: &str) -> Result<RecoveryData, Report> {
     #[derive(Debug, Deserialize)]
     struct Record {
+        #[allow(dead_code)]
         time: u64,
         taiwan: u64,
         finland: u64,

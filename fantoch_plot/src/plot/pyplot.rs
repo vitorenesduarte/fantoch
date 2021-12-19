@@ -57,8 +57,10 @@ impl<'p> PyPlot<'p> {
         let result =
             pytry!(self.py(), self.plt.getattr("subplots")?.call((), kwargs));
         let tuple = pytry!(self.py(), result.downcast::<PyTuple>());
-        let fig = Figure::new(tuple.get_item(0));
-        let ax = Axes::new(tuple.get_item(1))?;
+        let fig =
+            Figure::new(tuple.get_item(0).expect("subplots fig should be set"));
+        let ax =
+            Axes::new(tuple.get_item(1).expect("subplots ax should be set"))?;
         Ok((fig, ax))
     }
 

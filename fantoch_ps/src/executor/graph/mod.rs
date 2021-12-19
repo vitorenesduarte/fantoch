@@ -46,7 +46,6 @@ pub enum RequestReply {
 pub struct DependencyGraph {
     executor_index: usize,
     process_id: ProcessId,
-    shard_id: ShardId,
     executed_clock: AEClock<ProcessId>,
     vertex_index: VertexIndex,
     pending_index: PendingIndex,
@@ -95,9 +94,9 @@ impl DependencyGraph {
         let executed_clock = AEClock::with(ids.clone());
         // create indexes
         let vertex_index = VertexIndex::new(process_id);
-        let pending_index = PendingIndex::new(process_id, shard_id, *config);
+        let pending_index = PendingIndex::new(shard_id, *config);
         // create finder
-        let finder = TarjanSCCFinder::new(process_id, shard_id, *config);
+        let finder = TarjanSCCFinder::new(process_id, *config);
         let metrics = ExecutorMetrics::new();
         // create to execute
         let to_execute = Default::default();
@@ -110,7 +109,6 @@ impl DependencyGraph {
         DependencyGraph {
             executor_index,
             process_id,
-            shard_id,
             executed_clock,
             vertex_index,
             pending_index,

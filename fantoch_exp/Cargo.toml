@@ -17,17 +17,17 @@ exp = ["futures", "rusoto_core", "rusoto_credential", "rusoto_ec2", "tracing-fut
 bincode = "1.3.3"
 color-eyre = "0.5.11"
 indicatif = "0.16.2"
-flate2 = "1.0.20"
-futures = { version = "0.3.15", default-features = false, features = [], optional = true }
+flate2 = "1.0.22"
+futures = { version = "0.3.19", default-features = false, features = [], optional = true }
 rusoto_core = { version = "0.46.0", optional = true }
 rusoto_credential = { version = "0.46.0", optional = true }
 rusoto_ec2 = { version = "0.46.0", optional = true }
-serde = { version = "1.0.126", features = ["derive"] }
-serde_json = "1.0.64"
-tracing = "0.1.26"
+serde = { version = "1.0.132", features = ["derive"] }
+serde_json = "1.0.73"
+tracing = "0.1.29"
 tracing-futures = { version = "0.2.5", optional = true }
-tracing-subscriber = { version = "0.2.19", optional = true }
-tokio = { version = "1.9.0", features = ["full"], optional = true }
+tracing-subscriber = { version = "0.3.3", features = ["fmt"], optional = true }
+tokio = { version = "1.15.0", features = ["full"], optional = true }
 tsunami = { version = "0.11.1", default-features = false, features = ["aws", "baremetal"], optional = true }
 
 fantoch = { path = "../fantoch", default-features = false }

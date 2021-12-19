@@ -2,7 +2,7 @@ use super::index::{VertexIndex, VertexRef};
 use crate::protocol::common::graph::Dependency;
 use fantoch::command::Command;
 use fantoch::config::Config;
-use fantoch::id::{Dot, ProcessId, ShardId};
+use fantoch::id::{Dot, ProcessId};
 use fantoch::singleton;
 use fantoch::time::SysTime;
 use fantoch::HashSet;
@@ -25,7 +25,6 @@ pub enum FinderResult {
 #[derive(Clone)]
 pub struct TarjanSCCFinder {
     process_id: ProcessId,
-    shard_id: ShardId,
     config: Config,
     id: usize,
     stack: Vec<Dot>,
@@ -37,12 +36,10 @@ impl TarjanSCCFinder {
     /// Creates a new SCC finder that employs Tarjan's algorithm.
     pub fn new(
         process_id: ProcessId,
-        shard_id: ShardId,
         config: Config,
     ) -> Self {
         Self {
             process_id,
-            shard_id,
             config,
             id: 0,
             stack: Vec::new(),

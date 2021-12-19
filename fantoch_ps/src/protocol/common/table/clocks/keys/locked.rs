@@ -1,10 +1,9 @@
 use super::KeyClocks;
 use crate::protocol::common::table::{VoteRange, Votes};
 use fantoch::command::Command;
-use fantoch::id::{ProcessId, Rifl, ShardId};
+use fantoch::id::{ProcessId, ShardId};
 use fantoch::kvs::Key;
 use fantoch::shared::SharedMap;
-use fantoch::HashSet;
 use parking_lot::Mutex;
 use std::cmp;
 use std::collections::BTreeSet;
@@ -14,7 +13,6 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Default)]
 struct ClockAndPendingReads {
     clock: u64,
-    pending_reads: HashSet<Rifl>,
 }
 // all clock's are protected by a mutex
 type Clocks = Arc<SharedMap<Key, Mutex<ClockAndPendingReads>>>;
@@ -24,17 +22,15 @@ type Clocks = Arc<SharedMap<Key, Mutex<ClockAndPendingReads>>>;
 pub struct LockedKeyClocks {
     process_id: ProcessId,
     shard_id: ShardId,
-    nfr: bool,
     clocks: Clocks,
 }
 
 impl KeyClocks for LockedKeyClocks {
     /// Create a new `LockedKeyClocks` instance.
-    fn new(process_id: ProcessId, shard_id: ShardId, nfr: bool) -> Self {
+    fn new(process_id: ProcessId, shard_id: ShardId, _nfr: bool) -> Self {
         Self {
             process_id,
             shard_id,
-            nfr,
             clocks: common::new(),
         }
     }
@@ -199,6 +195,7 @@ mod common {
 mod tests {
     use super::*;
     use fantoch::kvs::KVOp;
+    use fantoch::id::Rifl;
 
     #[test]
     fn bump_test() {

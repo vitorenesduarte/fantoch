@@ -44,7 +44,9 @@ impl std::io::Write for TracingProgressBar {
     }
 }
 
-impl tracing_subscriber::fmt::MakeWriter for TracingProgressBar {
+impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer>
+    for TracingProgressBar
+{
     type Writer = Self;
 
     fn make_writer(&self) -> Self::Writer {
