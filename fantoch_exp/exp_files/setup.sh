@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-RUST_TOOLCHAIN="1.49.0"
+RUST_TOOLCHAIN="1.57.0"
 # RUST_TOOLCHAIN="nightly-2020-06-10"
 
 # flag indicating whether we should just remove previous installations
