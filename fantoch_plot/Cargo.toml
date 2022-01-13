@@ -11,7 +11,7 @@ default-run = "main"
 
 [dependencies]
 pyo3 = { version = "0.15.1", features = ["auto-initialize"] }
-color-eyre = "0.5.11"
+color-eyre = "0.6.0"
 csv = "1.1.6"
 rayon = "1.5.1"
 serde = "1.0.132"
