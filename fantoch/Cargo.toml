@@ -27,7 +27,7 @@ rand = "0.8.4"
 serde = { version = "1.0.132", features = ["derive", "rc"] }
 threshold = "0.9.1"
 tokio = { version = "1.15.0", features = ["full", "parking_lot"], optional = true }
-tokio-util = { version = "0.6.9", features = ["codec"], optional = true }
+tokio-util = { version = "0.7.0", features = ["codec"], optional = true }
 tracing = "0.1.29"
 tracing-appender = "0.2.0"
 tracing-subscriber = { version = "0.3.3", features = ["env-filter"] }
