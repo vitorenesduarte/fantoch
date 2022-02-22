@@ -14,7 +14,7 @@ max_level_trace = ["fantoch/max_level_trace"]
 
 [dependencies]
 ahash = "0.7.6"
-clap = "2.34.0"
+clap = "3.1.1"
 color-eyre = "0.5.11"
 futures = { version = "0.3.19", default-features = false, features = [] }
 rand = "0.8.4"
