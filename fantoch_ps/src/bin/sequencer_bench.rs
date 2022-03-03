@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{Command, Arg};
 use fantoch::metrics::Histogram;
 use fantoch::run::chan::{ChannelReceiver, ChannelSender};
 use fantoch::run::task;
@@ -23,7 +23,7 @@ const DEFAULT_CHECK_VOTES: bool = true;
 const CHANNEL_BUFFER_SIZE: usize = 10000;
 
 type Key = usize;
-type Command = BTreeSet<Key>;
+type KeySet = BTreeSet<Key>;
 type VoteRange = (Key, u64, u64);
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -134,7 +134,7 @@ async fn worker<S>(
     id: usize,
     mut requests: ChannelReceiver<(
         u64,
-        Command,
+        KeySet,
         oneshot::Sender<Vec<VoteRange>>,
     )>,
     sequencer: Arc<S>,
@@ -157,7 +157,7 @@ async fn client(
     keys_per_command: usize,
     check_votes: bool,
     mut to_workers: Vec<
-        ChannelSender<(u64, Command, oneshot::Sender<Vec<VoteRange>>)>,
+        ChannelSender<(u64, KeySet, oneshot::Sender<Vec<VoteRange>>)>,
     >,
 ) -> (Histogram, Vec<VoteRange>) {
     println!("client {} started...", id);
@@ -245,7 +245,7 @@ async fn client(
 
 trait Sequencer {
     fn new(keys_number: usize) -> Self;
-    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange>;
+    fn next(&self, proposal: u64, cmd: KeySet) -> Vec<VoteRange>;
 }
 
 struct LockSequencer {
@@ -259,7 +259,7 @@ impl Sequencer for LockSequencer {
         Self { keys }
     }
 
-    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
+    fn next(&self, proposal: u64, cmd: KeySet) -> Vec<VoteRange> {
         let vote_count = cmd.len();
         let mut votes = Vec::with_capacity(vote_count);
         let mut locks = Vec::with_capacity(vote_count);
@@ -299,7 +299,7 @@ impl Sequencer for AtomicSequencer {
         Self { keys }
     }
 
-    fn next(&self, proposal: u64, cmd: Command) -> Vec<VoteRange> {
+    fn next(&self, proposal: u64, cmd: KeySet) -> Vec<VoteRange> {
         let max_vote_count = cmd.len() * 2 - 1;
         let mut votes = Vec::with_capacity(max_vote_count);
 
@@ -363,40 +363,40 @@ impl Sequencer for AtomicSequencer {
 }
 
 fn parse_args() -> (usize, usize, usize, usize, bool) {
-    let matches = App::new("sequencer_bench")
+    let matches = Command::new("sequencer_bench")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Benchmark timestamp-assignment in tempo")
         .arg(
-            Arg::with_name("keys")
+            Arg::new("keys")
                 .long("keys")
                 .value_name("KEYS")
                 .help("total number of keys; default: 100")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("clients")
+            Arg::new("clients")
                 .long("clients")
                 .value_name("CLIENTS")
                 .help("total number of clients; default: 10")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("commands_per_client")
+            Arg::new("commands_per_client")
                 .long("commands_per_client")
                 .value_name("COMMANDS_PER_CLIENT")
                 .help("number of commands to be issued by each client; default: 10000")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("keys_per_command")
+            Arg::new("keys_per_command")
                 .long("keys_per_command")
                 .value_name("KEYS_PER_COMMAND")
                 .help("number of keys accessed by each command; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("check_votes")
+            Arg::new("check_votes")
                 .long("check_votes")
                 .value_name("CHECK_VOTES")
                 .help("checks if votes generated are correct; default: true")

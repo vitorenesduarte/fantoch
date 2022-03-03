@@ -1,6 +1,6 @@
 mod common;
 
-use clap::{App, Arg};
+use clap::{Command, Arg};
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
 use fantoch::id::ClientId;
@@ -67,12 +67,12 @@ fn main() -> Result<(), Report> {
 }
 
 fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
-    let matches = App::new("client")
+    let matches = Command::new("client")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Runs a client that will connect to some instance of a protocol.")
         .arg(
-            Arg::with_name("ids")
+            Arg::new("ids")
                 .long("ids")
                 .value_name("ID_RANGE")
                 .help("a range of client identifiers represented as START-END; as many client as the number of identifers will be created")
@@ -80,7 +80,7 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("addresses")
+            Arg::new("addresses")
                 .long("addresses")
                 .value_name("ADDRESSES")
                 .help("comma-separated list of addresses to connect to (in the form IP:PORT e.g. 127.0.0.1:3000)")
@@ -88,112 +88,112 @@ fn parse_args() -> (ClientArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("interval")
+            Arg::new("interval")
                 .long("interval")
                 .value_name("INTERVAL")
                 .help("if this value is set, an open-loop client will be created (by default is closed-loop) and the value set is used as the interval (in milliseconds) between submitted commands")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("shard_count")
+            Arg::new("shard_count")
                 .long("shard_count")
                 .value_name("SHARD_COUNT")
                 .help("number of shards accessed in the system; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("key_gen")
+            Arg::new("key_gen")
                 .long("key_gen")
                 .value_name("KEY_GEN")
                 .help("representation of a key generator; possible values 'conflict_pool,100,1' where 100 is the conflict rate and 1 the pool size, or 'zipf,1.3,10000' where 1.3 is the zipf coefficient (which should be non-zero) and 10000 the number of keys (per shard) in the distribution; default: 'conflict_rate,100,1'")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("keys_per_command")
+            Arg::new("keys_per_command")
                 .long("keys_per_command")
                 .value_name("KEYS_PER_COMMAND")
                 .help("number of keys accessed by each command to be issued by each client; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("commands_per_client")
+            Arg::new("commands_per_client")
                 .long("commands_per_client")
                 .value_name("COMMANDS_PER_CLIENT")
                 .help("number of commands to be issued by each client; default: 1000")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("read_only_percentage")
+            Arg::new("read_only_percentage")
                 .long("read_only_percentage")
                 .value_name("READ_ONLY_PERCENTAGE")
                 .help("percentage of read-only commands; default: 0")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("payload_size")
+            Arg::new("payload_size")
                 .long("payload_size")
                 .value_name("PAYLOAD_SIZE")
                 .help("size of the command payload; default: 100 (bytes)")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("batch_max_size")
+            Arg::new("batch_max_size")
                 .long("batch_max_size")
                 .value_name("BATCH_MAX_SIZE")
                 .help("max size of the batch; default: 1 (i.e., no batching)")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("batch_max_delay")
+            Arg::new("batch_max_delay")
                 .long("batch_max_delay")
                 .value_name("BATCH_MAX_DELAY")
                 .help("max delay of a batch; default: 5 (milliseconds)")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tcp_nodelay")
+            Arg::new("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
                 .help("set TCP_NODELAY; default: true")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("channel_buffer_size")
+            Arg::new("channel_buffer_size")
                 .long("channel_buffer_size")
                 .value_name("CHANNEL_BUFFER_SIZE")
                 .help("set the size of the buffer in each channel used for task communication; default: 10000")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("status_frequency")
+            Arg::new("status_frequency")
                 .long("status_frequency")
                 .value_name("STATUS_FREQUENCY")
                 .help("frequency of status messages; if set with 1, a status message will be shown for each completed command; default: no status messages are shown")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("metrics_file")
+            Arg::new("metrics_file")
                 .long("metrics_file")
                 .value_name("METRICS_FILE")
                 .help("file in which metrics are written to; by default metrics are not logged")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("stack_size")
+            Arg::new("stack_size")
                 .long("stack_size")
                 .value_name("STACK_SIZE")
                 .help("stack size (in bytes) of each tokio thread; default: 2 * 1024 * 1024 (bytes)")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cpus")
+            Arg::new("cpus")
                 .long("cpus")
                 .value_name("CPUS")
                 .help("number of cpus to be used by tokio; by default all available cpus are used")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("log_file")
+            Arg::new("log_file")
                 .long("log_file")
                 .value_name("LOG_FILE")
                 .help("file to which logs will be written to; if not set, logs will be redirect to the stdout")

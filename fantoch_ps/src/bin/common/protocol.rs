@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{Command, Arg};
 use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::id::{ProcessId, ShardId};
@@ -116,12 +116,12 @@ where
 }
 
 fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
-    let matches = App::new("process")
+    let matches = Command::new("process")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Runs an instance of some protocol.")
         .arg(
-            Arg::with_name("id")
+            Arg::new("id")
                 .long("id")
                 .value_name("ID")
                 .help("process identifier")
@@ -129,7 +129,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("shard_id")
+            Arg::new("shard_id")
                 .long("shard_id")
                 .value_name("SHARD_ID")
                 .help("shard identifier; default: 0")
@@ -137,35 +137,35 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("sorted_processes")
+            Arg::new("sorted_processes")
                 .long("sorted")
                 .value_name("SORTED_PROCESSES")
                 .help("comma-separated list of 'ID-SHARD_ID', where ID is the process id and SHARD-ID the identifier of the shard it belongs to, sorted by distance; if not set, processes will ping each other and try to figure out this list from ping latency; for this, 'ping_interval' should be set")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("ip")
+            Arg::new("ip")
                 .long("ip")
                 .value_name("IP")
                 .help("ip to bind to; default: 127.0.0.1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("port")
+            Arg::new("port")
                 .long("port")
                 .value_name("PORT")
                 .help("port to bind to; default: 3000")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("client_port")
+            Arg::new("client_port")
                 .long("client_port")
                 .value_name("CLIENT_PORT")
                 .help("client port to bind to; default: 4000")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("addresses")
+            Arg::new("addresses")
                 .long("addresses")
                 .value_name("ADDRESSES")
                 .help("comma-separated list of addresses to connect to; if a delay (in milliseconds) is to be injected, the address should be of the form IP:PORT-DELAY; for example, 127.0.0.1:3000-120 injects a delay of 120 milliseconds before sending a message to the process at the 127.0.0.1:3000 address")
@@ -173,7 +173,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("n")
+            Arg::new("n")
                 .long("processes")
                 .value_name("PROCESS_NUMBER")
                 .help("number of processes")
@@ -181,7 +181,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("f")
+            Arg::new("f")
                 .long("faults")
                 .value_name("FAULT_NUMBER")
                 .help("number of allowed faults")
@@ -189,7 +189,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("shard_count")
+            Arg::new("shard_count")
                 .long("shard_count")
                 .value_name("SHARDS_COUNT")
                 .help("number of shards; default: 1")
@@ -197,98 +197,98 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("execute_at_commit")
+            Arg::new("execute_at_commit")
                 .long("execute_at_commit")
                 .value_name("EXECUTE_AT_COMMIT")
                 .help("bool indicating whether execution should be skipped; default: false")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("executor_cleanup_interval")
+            Arg::new("executor_cleanup_interval")
                 .long("executor_cleanup_interval")
                 .value_name("EXECUTOR_CLEANUP_INTERVAL")
                 .help("executor cleanup interval (in milliseconds); default: 5")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("executor_monitor_pending_interval")
+            Arg::new("executor_monitor_pending_interval")
                 .long("executor_monitor_pending_interval")
                 .value_name("EXECUTOR_MONITOR_PENDING_INTERVAL")
                 .help("executor monitor pending interval (in milliseconds); if no value if set, pending commands are not monitored")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("gc_interval")
+            Arg::new("gc_interval")
                 .long("gc_interval")
                 .value_name("GC_INTERVAL")
                 .help("garbage collection interval (in milliseconds); if no value if set, stability doesn't run and commands are deleted at commit time")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("leader")
+            Arg::new("leader")
                 .long("leader")
                 .value_name("LEADER")
                 .help("id of the starting leader process in leader-based protocols")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("nfr")
+            Arg::new("nfr")
                 .long("nfr")
                 .value_name("NFR")
                 .help("boolean indicating whether NFR is enabled; default: false")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tempo_tiny_quorums")
+            Arg::new("tempo_tiny_quorums")
                 .long("tempo_tiny_quorums")
                 .value_name("TEMPO_TINY_QUORUMS")
                 .help("boolean indicating whether tempo's tiny quorums are enabled; default: false")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tempo_clock_bump_interval")
+            Arg::new("tempo_clock_bump_interval")
                 .long("tempo_clock_bump_interval")
                 .value_name("TEMPO_CLOCK_BUMP_INTERVAL")
                 .help("number indicating the interval (in milliseconds) between clock bumps; if this value is not set, then clocks are not bumped periodically")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tempo_detached_send_interval")
+            Arg::new("tempo_detached_send_interval")
                 .long("tempo_detached_send_interval")
                 .value_name("TEMPO_DETACHED_SEND_INTERVAL")
                 .help("number indicating the interval (in milliseconds) between mdetached messages are sent; default: 5")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("skip_fast_ack")
+            Arg::new("skip_fast_ack")
                 .long("skip_fast_ack")
                 .value_name("SKIP_FAST_ACK")
                 .help("boolean indicating whether protocols should try to enable the skip fast ack optimization; default: false")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tcp_nodelay")
+            Arg::new("tcp_nodelay")
                 .long("tcp_nodelay")
                 .value_name("TCP_NODELAY")
                 .help("TCP_NODELAY; default: true")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tcp_buffer_size")
+            Arg::new("tcp_buffer_size")
                 .long("tcp_buffer_size")
                 .value_name("TCP_BUFFER_SIZE")
                 .help("size of the TCP buffer; default: 8192 (bytes)")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("tcp_flush_interval")
+            Arg::new("tcp_flush_interval")
                 .long("tcp_flush_interval")
                 .value_name("TCP_FLUSH_INTERVAL")
                 .help("TCP flush interval (in milliseconds); if 0, then flush occurs on every send; default: 0")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("process_channel_buffer_size")
+            Arg::new("process_channel_buffer_size")
                 .long("process_channel_buffer_size")
                 .value_name("PROCESS_CHANNEL_BUFFER_SIZE")
                 .help(
@@ -297,7 +297,7 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("client_channel_buffer_size")
+            Arg::new("client_channel_buffer_size")
                 .long("client_channel_buffer_size")
                 .value_name("CLIENT_CHANNEL_BUFFER_SIZE")
                 .help(
@@ -306,63 +306,63 @@ fn parse_args() -> (ProtocolArgs, tracing_appender::non_blocking::WorkerGuard) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("workers")
+            Arg::new("workers")
                 .long("workers")
                 .value_name("WORKERS")
                 .help("number of protocol workers; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("executors")
+            Arg::new("executors")
                 .long("executors")
                 .value_name("EXECUTORS")
                 .help("number of executors; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("multiplexing")
+            Arg::new("multiplexing")
                 .long("multiplexing")
                 .value_name("MULTIPLEXING")
                 .help("number of connections between replicas; default: 1")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("execution_log")
+            Arg::new("execution_log")
                 .long("execution_log")
                 .value_name("EXECUTION_LOG")
                 .help("log file in which execution info should be written to; by default this information is not logged")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("ping_interval")
+            Arg::new("ping_interval")
                 .long("ping_interval")
                 .value_name("PING_INTERVAL")
                 .help("number indicating the interval (in milliseconds) between pings between processes; by default there's no pinging; if set, this value should be > 0")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("metrics_file")
+            Arg::new("metrics_file")
                 .long("metrics_file")
                 .value_name("METRICS_FILE")
                 .help("file in which metrics are (periodically, every 5s) written to; by default metrics are not logged")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("stack_size")
+            Arg::new("stack_size")
                 .long("stack_size")
                 .value_name("STACK_SIZE")
                 .help("stack size (in bytes) of each tokio thread; default: 2 * 1024 * 1024 (bytes)")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("cpus")
+            Arg::new("cpus")
                 .long("cpus")
                 .value_name("CPUS")
                 .help("number of cpus to be used by tokio; by default all available cpus are used")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("log_file")
+            Arg::new("log_file")
                 .long("log_file")
                 .value_name("LOG_FILE")
                 .help("file to which logs will be written to; if not set, logs will be redirect to the stdout")
