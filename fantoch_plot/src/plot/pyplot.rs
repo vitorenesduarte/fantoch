@@ -43,14 +43,12 @@ impl<'p> PyPlot<'p> {
     ) -> Result<(Figure<'_>, Axes<'_>), Report> {
         // check that `ncols` and `nrows` was not set
         if let Some(kwargs) = kwargs {
-            assert_eq!(
-                kwargs.get_item("ncols"),
-                None,
+            assert!(
+                kwargs.get_item("ncols").is_none(),
                 "ncols shouldn't be set here; use `PyPlot::subplot` instead"
             );
-            assert_eq!(
-                kwargs.get_item("nrows"),
-                None,
+            assert!(
+                kwargs.get_item("nrows").is_none(),
                 "nrows shouldn't be set here; use `PyPlot::subplot` instead"
             );
         }

@@ -1,6 +1,6 @@
 mod common;
 
-use clap::{App, Arg};
+use clap::{Command, Arg};
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::run::rw::Rw;
@@ -38,12 +38,12 @@ async fn main() {
 }
 
 fn parse_args() -> (Config, String) {
-    let matches = App::new("executor_replay")
+    let matches = Command::new("executor_replay")
         .version("0.1")
         .author("Vitor Enes <vitorenesduarte@gmail.com>")
         .about("Replays an execution log.")
         .arg(
-            Arg::with_name("n")
+            Arg::new("n")
                 .long("processes")
                 .value_name("PROCESS_NUMBER")
                 .help("total number of processes")
@@ -51,7 +51,7 @@ fn parse_args() -> (Config, String) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("f")
+            Arg::new("f")
                 .long("faults")
                 .value_name("FAULT_NUMBER")
                 .help("total number of allowed faults")
@@ -59,7 +59,7 @@ fn parse_args() -> (Config, String) {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("execution_log")
+            Arg::new("execution_log")
                 .long("execution_log")
                 .value_name("EXECUTION_LOG")
                 .help("log file with execution infos")
