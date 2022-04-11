@@ -885,7 +885,7 @@ async fn fairness_and_tail_latency_plot() -> Result<(), Report> {
     );
 
     // create AWS planet
-    // let planet = Some(Planet::from("../latency_aws"));
+    // let planet = Some(Planet::from(LATENCY_AWS));
 
     // baremetal_bench(
     aws_bench(
