@@ -10,7 +10,7 @@ license = "MIT/Apache-2.0"
 default-run = "main"
 
 [dependencies]
-pyo3 = { version = "0.16.0", features = ["auto-initialize"] }
+pyo3 = { version = "0.16.0", features = ["auto-initialize"], optional = true }
 color-eyre = "0.6.1"
 csv = "1.1.6"
 rayon = "1.5.1"
@@ -18,3 +18,19 @@ serde = "1.0.136"
 
 fantoch = { path = "../fantoch" }
 fantoch_exp = { path = "../fantoch_exp", default-features = false }
+
+[[bin]]
+name = "main"
+required-features = ["pyo3"]
+
+[[bin]]
+name = "plot_sim_output"
+required-features = ["pyo3"]
+
+[[bin]]
+name = "migrate"
+required-features = []
+
+[[bin]]
+name = "data_to_json"
+required-features = []

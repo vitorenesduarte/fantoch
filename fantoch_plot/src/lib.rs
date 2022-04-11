@@ -2,38 +2,56 @@
 
 mod db;
 mod fmt;
+#[cfg(feature = "pyo3")]
 pub mod plot;
 
 // Re-exports.
 pub use db::{ExperimentData, LatencyPrecision, ResultsDB, Search};
 pub use fmt::PlotFmt;
 
+#[cfg(feature = "pyo3")]
 use color_eyre::eyre::WrapErr;
+#[cfg(feature = "pyo3")]
 use color_eyre::Report;
+#[cfg(feature = "pyo3")]
 use fantoch::client::KeyGen;
 // use fantoch::executor::ExecutorMetricsKind;
 use fantoch::id::ProcessId;
+#[cfg(feature = "pyo3")]
 use fantoch::protocol::ProtocolMetricsKind;
+#[cfg(feature = "pyo3")]
 use fantoch_exp::Protocol;
+#[cfg(feature = "pyo3")]
 use plot::axes::Axes;
+#[cfg(feature = "pyo3")]
 use plot::figure::Figure;
+#[cfg(feature = "pyo3")]
 use plot::pyplot::PyPlot;
+#[cfg(feature = "pyo3")]
 use plot::Matplotlib;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
 use pyo3::types::PyDict;
+#[cfg(feature = "pyo3")]
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 // defaults: [6.4, 4.8]
 // copied from: https://github.com/jonhoo/thesis/blob/master/graphs/common.py
+#[cfg(feature = "pyo3")]
 const GOLDEN_RATIO: f64 = 1.61803f64;
+#[cfg(feature = "pyo3")]
 const FIGWIDTH: f64 = 8.5 / GOLDEN_RATIO;
 // no longer golden ratio
+#[cfg(feature = "pyo3")]
 const FIGSIZE: (f64, f64) = (FIGWIDTH, (FIGWIDTH / GOLDEN_RATIO) - 0.6);
 
 // adjust are percentages:
 // - setting top to 0.80, means we leave the top 20% free
 // - setting bottom to 0.20, means we leave the bottom 20% free
+#[cfg(feature = "pyo3")]
 const ADJUST_TOP: f64 = 0.83;
+#[cfg(feature = "pyo3")]
 const ADJUST_BOTTOM: f64 = 0.15;
 
 #[derive(Debug, Clone)]
@@ -102,6 +120,7 @@ pub enum ThroughputYAxis {
     CPU,
 }
 
+#[cfg(feature = "pyo3")]
 impl ThroughputYAxis {
     pub fn name(&self) -> String {
         match self {
@@ -146,11 +165,13 @@ impl MetricsType {
     }
 }
 
+#[cfg(feature = "pyo3")]
 enum AxisToScale {
     X,
     Y,
 }
 
+#[cfg(feature = "pyo3")]
 pub fn set_global_style() -> Result<(), Report> {
     // start python
     let gil = Python::acquire_gil();
@@ -182,6 +203,7 @@ pub fn set_global_style() -> Result<(), Report> {
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn recovery_plot(
     taiwan: (Vec<u64>, Vec<u64>),
     finland: (Vec<u64>, Vec<u64>),
@@ -279,6 +301,7 @@ pub fn recovery_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn nfr_plot(
     n: usize,
     read_only_percentages: Vec<usize>,
@@ -502,6 +525,7 @@ pub fn nfr_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn fast_path_plot<F>(
     searches: Vec<Search>,
     clients_per_region: usize,
@@ -622,6 +646,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn increasing_sites_plot(
     ns: Vec<usize>,
     protocols: Vec<(Protocol, Option<usize>)>,
@@ -855,6 +880,7 @@ pub fn increasing_sites_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn fairness_plot<R>(
     searches: Vec<Search>,
     legend_order: Option<Vec<usize>>,
@@ -1094,6 +1120,7 @@ pub fn fairness_plot<R>(
 }
 
 // based on: https://github.com/jonhoo/thesis/blob/master/graphs/vote-memlimit-cdf.py
+#[cfg(feature = "pyo3")]
 pub fn cdf_plot(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
@@ -1137,6 +1164,7 @@ pub fn cdf_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn cdf_plot_split(
     top_searches: Vec<Search>,
     bottom_searches: Vec<Search>,
@@ -1235,6 +1263,7 @@ pub fn cdf_plot_split(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 fn inner_cdf_plot_style(
     py: Python<'_>,
     ax: &Axes<'_>,
@@ -1266,6 +1295,7 @@ fn inner_cdf_plot_style(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 fn inner_cdf_plot(
     py: Python<'_>,
     ax: &Axes<'_>,
@@ -1332,6 +1362,7 @@ fn inner_cdf_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn throughput_something_plot(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
@@ -1397,6 +1428,7 @@ pub fn throughput_something_plot(
     Ok(max_throughputs)
 }
 
+#[cfg(feature = "pyo3")]
 pub fn inner_throughput_something_plot(
     py: Python<'_>,
     ax: &Axes<'_>,
@@ -1534,6 +1566,7 @@ pub fn inner_throughput_something_plot(
     Ok(max_throughputs)
 }
 
+#[cfg(feature = "pyo3")]
 pub fn heatmap_plot<F>(
     n: usize,
     protocols: Vec<(Protocol, usize)>,
@@ -1585,6 +1618,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn intra_machine_scalability_plot(
     searches: Vec<Search>,
     n: usize,
@@ -1628,6 +1662,7 @@ pub fn intra_machine_scalability_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn inter_machine_scalability_plot(
     searches: Vec<Search>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
@@ -1760,6 +1795,7 @@ pub fn inter_machine_scalability_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn batching_plot(
     searches: Vec<(Search, usize)>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
@@ -1900,6 +1936,7 @@ pub fn batching_plot(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn throughput_something_plot_split<GInput, G, RInput, R>(
     n: usize,
     search_gen_inputs: Vec<GInput>,
@@ -2028,6 +2065,7 @@ where
     Ok(result)
 }
 
+#[cfg(feature = "pyo3")]
 pub fn heatmap_plot_split<F>(
     n: usize,
     protocols: Vec<(Protocol, usize)>,
@@ -2099,6 +2137,7 @@ where
 }
 
 // based on: https://matplotlib.org/3.1.1/gallery/images_contours_and_fields/image_annotated_heatmap.html#sphx-glr-gallery-images-contours-and-fields-image-annotated-heatmap-py
+#[cfg(feature = "pyo3")]
 pub fn inner_heatmap_plot<F>(
     py: Python<'_>,
     fig: &Figure<'_>,
@@ -2291,6 +2330,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 pub fn dstat_table(
     searches: Vec<Search>,
     metrics_type: MetricsType,
@@ -2393,6 +2433,7 @@ pub fn dstat_table(
     )
 }
 
+#[cfg(feature = "pyo3")]
 pub fn process_metrics_table(
     searches: Vec<Search>,
     metrics_type: MetricsType,
@@ -2584,6 +2625,7 @@ pub fn process_metrics_table(
     )
 }
 
+#[cfg(feature = "pyo3")]
 fn table(
     plotted: usize,
     col_labels: Vec<String>,
@@ -2629,6 +2671,7 @@ fn table(
 }
 
 // percentiles of interest
+#[cfg(feature = "pyo3")]
 fn percentiles() -> impl Iterator<Item = f64> {
     (10..=60)
         .step_by(10)
@@ -2640,6 +2683,7 @@ fn percentiles() -> impl Iterator<Item = f64> {
 }
 
 // https://matplotlib.org/3.3.1/api/_as_gen/matplotlib.pyplot.subplots_adjust.html?highlight=subplots_adjust#matplotlib.pyplot.subplots_adjust
+#[cfg(feature = "pyo3")]
 pub fn start_plot<'a>(
     py: Python<'a>,
     plt: &'a PyPlot<'a>,
@@ -2664,6 +2708,7 @@ pub fn start_plot<'a>(
     Ok((fig, ax))
 }
 
+#[cfg(feature = "pyo3")]
 pub fn end_plot(
     something_plotted: bool,
     output_dir: Option<&str>,
@@ -2707,6 +2752,7 @@ pub fn end_plot(
 
 /// `legends` is a mapping from legend order to a pair of the matplotlib object
 /// and its legend.
+#[cfg(feature = "pyo3")]
 pub fn add_legend(
     plotted: usize,
     legends: Option<BTreeMap<usize, (&PyAny, String)>>,
@@ -2768,6 +2814,7 @@ pub fn add_legend(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 fn set_log_scale(
     py: Python<'_>,
     ax: &Axes<'_>,
@@ -2837,6 +2884,7 @@ fn set_log_scale(
     Ok(())
 }
 
+#[cfg(feature = "pyo3")]
 fn bar_style<'a>(
     py: Python<'a>,
     search: Search,
@@ -2875,6 +2923,7 @@ fn bar_style<'a>(
     Ok(kwargs)
 }
 
+#[cfg(feature = "pyo3")]
 fn line_style<'a>(
     py: Python<'a>,
     search: Search,
