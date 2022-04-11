@@ -23,14 +23,25 @@ const PLOT_DIR: Option<&str> = Some("plots");
 const ALL_DSTATS: bool = true;
 
 fn main() -> Result<(), Report> {
+    processed_data_to_json()?;
+
     // set global style
-    fantoch_plot::set_global_style()?;
+    // fantoch_plot::set_global_style()?;
 
     // partial_replication_all()?;
     // multi_key()?;
     // single_key_all()?;
-    show_distance_matrix();
-    thesis()?;
+    // show_distance_matrix();
+    // thesis()?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn processed_data_to_json() -> Result<(), Report> {
+    let results_dir = "../results_fairness_and_tail_latency";
+    let output_dir = "../results_fairness_and_tail_latency_processed";
+    let db = ResultsDB::load(results_dir).wrap_err("load results")?;
+    db.data_to_json(output_dir)?;
     Ok(())
 }
 
