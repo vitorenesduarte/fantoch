@@ -1099,7 +1099,7 @@ async fn whatever_plot() -> Result<(), Report> {
     );
 
     // create AWS planet
-    // let planet = Some(Planet::from("../latency_aws"));
+    // let planet = Some(Planet::from(LATENCY_AWS));
     let planet = None; // if delay is not to be injected
 
     baremetal_bench(
