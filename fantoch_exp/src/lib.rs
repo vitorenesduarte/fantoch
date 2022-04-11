@@ -156,6 +156,7 @@ impl Testbed {
 pub enum SerializationFormat {
     BincodeGz,
     Json,
+    JsonPretty,
 }
 
 // TODO maybe make this async
@@ -181,6 +182,9 @@ where
         SerializationFormat::Json => {
             serde_json::to_writer(buf, &data).wrap_err("serialize")?
         }
+        SerializationFormat::JsonPretty => {
+            serde_json::to_writer_pretty(buf, &data).wrap_err("serialize")?
+        }
     }
     Ok(())
 }
@@ -203,7 +207,7 @@ where
             let buf = flate2::bufread::GzDecoder::new(buf);
             bincode::deserialize_from(buf).wrap_err("deserialize")?
         }
-        SerializationFormat::Json => {
+        SerializationFormat::Json | SerializationFormat::JsonPretty => {
             serde_json::from_reader(buf).wrap_err("deserialize")?
         }
     };

@@ -433,12 +433,12 @@ impl ResultsDB {
 
             // save exp config
             let exp_config_path = timestamp_dir.join("exp_config.json");
-            fantoch_exp::serialize(exp_config, &exp_config_path, SerializationFormat::Json)
+            fantoch_exp::serialize(exp_config, &exp_config_path, SerializationFormat::JsonPretty)
                 .wrap_err_with(|| format!("serialize exp config {:?}", exp_config_path))?;
 
             // save experiment data
             let exp_data_path = timestamp_dir.join("exp_data.json");
-            fantoch_exp::serialize(exp_data, &exp_data_path, SerializationFormat::Json)
+            fantoch_exp::serialize(exp_data, &exp_data_path, SerializationFormat::JsonPretty)
                 .wrap_err_with(|| format!("serialize exp data {:?}", exp_data_path))?;
         }
         Ok(())
