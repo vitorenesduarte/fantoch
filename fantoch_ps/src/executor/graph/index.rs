@@ -150,10 +150,7 @@ pub struct PendingIndex {
 }
 
 impl PendingIndex {
-    pub fn new(
-        shard_id: ShardId,
-        config: Config,
-    ) -> Self {
+    pub fn new(shard_id: ShardId, config: Config) -> Self {
         Self {
             shard_id,
             config,

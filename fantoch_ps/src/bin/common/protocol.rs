@@ -1,4 +1,4 @@
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use color_eyre::Report;
 use fantoch::config::Config;
 use fantoch::id::{ProcessId, ShardId};

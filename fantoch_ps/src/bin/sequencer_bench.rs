@@ -1,4 +1,4 @@
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use fantoch::metrics::Histogram;
 use fantoch::run::chan::{ChannelReceiver, ChannelSender};
 use fantoch::run::task;

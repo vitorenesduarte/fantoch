@@ -34,10 +34,7 @@ pub struct TarjanSCCFinder {
 
 impl TarjanSCCFinder {
     /// Creates a new SCC finder that employs Tarjan's algorithm.
-    pub fn new(
-        process_id: ProcessId,
-        config: Config,
-    ) -> Self {
+    pub fn new(process_id: ProcessId, config: Config) -> Self {
         Self {
             process_id,
             config,

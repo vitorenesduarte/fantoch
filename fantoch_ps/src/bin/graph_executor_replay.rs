@@ -1,6 +1,6 @@
 mod common;
 
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use fantoch::config::Config;
 use fantoch::executor::Executor;
 use fantoch::run::rw::Rw;

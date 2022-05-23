@@ -1,6 +1,6 @@
 mod common;
 
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use color_eyre::Report;
 use fantoch::client::{KeyGen, Workload};
 use fantoch::id::ClientId;

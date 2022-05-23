@@ -38,9 +38,7 @@ where
             })
             .collect();
         // create pool
-        let to_pool = Self {
-            pool,
-        };
+        let to_pool = Self { pool };
         (to_pool, rxs)
     }
 

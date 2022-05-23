@@ -194,8 +194,8 @@ mod common {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fantoch::kvs::KVOp;
     use fantoch::id::Rifl;
+    use fantoch::kvs::KVOp;
 
     #[test]
     fn bump_test() {
