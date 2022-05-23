@@ -16,7 +16,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-#[derive(Clone)]
 pub struct TableExecutor {
     process_id: ProcessId,
     shard_id: ShardId,

@@ -101,7 +101,6 @@ impl MultiVotesTable {
     }
 }
 
-#[derive(Clone)]
 struct VotesTable {
     key: Key,
     process_id: ProcessId,

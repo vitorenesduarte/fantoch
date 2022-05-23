@@ -16,7 +16,6 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::iter::FromIterator;
 
-#[derive(Clone)]
 pub struct GraphExecutor {
     executor_index: usize,
     process_id: ProcessId,

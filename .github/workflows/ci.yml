@@ -72,8 +72,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2021-10-21
-          override: true
+          toolchain: stable
 
       - name: Test fantoch_plot
         run: |
