@@ -78,7 +78,7 @@ jobs:
       - name: Test fantoch_plot
         run: |
           sudo apt-get install python3-dev python3-pip
-          pip3 install matplotlib
+          pip3 install matplotlib==3.3.0
           cd fantoch_plot/ && cargo test
 
       - name: Check fantoch_exp
