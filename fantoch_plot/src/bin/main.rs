@@ -36,21 +36,21 @@ fn main() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn thesis() -> Result<(), Report> {
-    // eurosys()?;
-    // fast_path_plot()?;
-    // increasing_sites_plot()?;
-    // nfr_plot()?;
+    eurosys()?;
+    fast_path_plot()?;
+    increasing_sites_plot()?;
+    nfr_plot()?;
     recovery_plot()?;
     Ok(())
 }
 
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
-    // fairness_plot()?;
+    fairness_plot()?;
     tail_latency_plot()?;
     increasing_load_plot()?;
-    // batching_plot()?;
-    // partial_replication_plot()?;
+    batching_plot()?;
+    partial_replication_plot()?;
     Ok(())
 }
 

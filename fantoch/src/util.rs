@@ -29,7 +29,6 @@ macro_rules! debug {
 macro_rules! debug {
     ($( $args:expr ),*) => {
         ()
-        // println!( $( $args ), *)
     };
 }
 
@@ -44,7 +43,6 @@ macro_rules! trace {
 macro_rules! trace {
     ($( $args:expr ),*) => {
         ()
-        // println!( $( $args ), *)
     };
 }
 
