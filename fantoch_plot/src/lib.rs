@@ -1171,6 +1171,8 @@ pub fn cdf_plot_split(
     x_range: Option<(f64, f64)>,
     style_fun: Option<Box<dyn Fn(&Search) -> HashMap<Style, String>>>,
     latency_precision: LatencyPrecision,
+    y_bbox_to_anchor: Option<f64>,
+    height_adjust: Option<f64>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -1184,6 +1186,13 @@ pub fn cdf_plot_split(
     // - adjust vertical space between the two plots
     let kwargs = pydict!(py, ("hspace", 0.2));
     let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
+
+    // adjust height
+    let (width, mut height) = FIGSIZE;
+    if let Some(height_adjust) = height_adjust {
+        height += height_adjust;
+    }
+    fig.set_size_inches(width, height)?;
 
     let mut previous_axis: Option<Axes<'_>> = None;
     let mut plotted = 0;
@@ -1232,13 +1241,13 @@ pub fn cdf_plot_split(
                 // hide x-axis
                 ax.xaxis.set_visible(false)?;
                 // specific pull-up for this kind of plot
-                let y_bbox_to_anchor = Some(1.66);
+                let y_bbox_to_anchor = y_bbox_to_anchor.unwrap_or(1.66);
                 // legend
                 add_legend(
                     subfigure_plotted,
                     None,
                     None,
-                    y_bbox_to_anchor,
+                    Some(y_bbox_to_anchor),
                     None,
                     py,
                     &ax,
@@ -1952,9 +1961,11 @@ pub fn throughput_something_plot_split<GInput, G, RInput, R>(
     y_axis: ThroughputYAxis,
     y_log_scale: bool,
     x_bbox_to_anchor: Option<f64>,
+    y_bbox_to_anchor: Option<f64>,
     legend_column_spacing: Option<f64>,
     left_margin: Option<f64>,
-    witdh_reduction: Option<f64>,
+    width_adjust: Option<f64>,
+    height_adjust: Option<f64>,
     output_dir: Option<&str>,
     output_file: &str,
     db: &ResultsDB,
@@ -1978,11 +1989,14 @@ where
     }
     let (fig, _) = start_plot(py, &plt, Some(kwargs))?;
 
-    // increase height
-    let (mut width, height) = FIGSIZE;
-    if let Some(width_reduction) = witdh_reduction {
-        width -= width_reduction;
+    let (mut width, mut height) = FIGSIZE;
+    if let Some(width_adjust) = width_adjust {
+        width += width_adjust;
     }
+    if let Some(height_adjust) = height_adjust {
+        height += height_adjust;
+    }
+    // increase height (besides the adjustments)
     fig.set_size_inches(width, height + 1.5)?;
 
     // keep track of the number of plotted instances
@@ -2031,13 +2045,13 @@ where
         match subplot {
             1 => {
                 // specific pull-up for this kind of plot
-                let y_bbox_to_anchor = Some(1.46);
+                let y_bbox_to_anchor = y_bbox_to_anchor.unwrap_or(1.46);
                 // legend
                 add_legend(
                     plotted,
                     None,
                     x_bbox_to_anchor,
-                    y_bbox_to_anchor,
+                    Some(y_bbox_to_anchor),
                     legend_column_spacing,
                     py,
                     &ax,

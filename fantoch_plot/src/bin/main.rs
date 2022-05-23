@@ -47,10 +47,10 @@ fn thesis() -> Result<(), Report> {
 #[allow(dead_code)]
 fn eurosys() -> Result<(), Report> {
     // fairness_plot()?;
-    // tail_latency_plot()?;
-    // increasing_load_plot()?;
+    tail_latency_plot()?;
+    increasing_load_plot()?;
     // batching_plot()?;
-    partial_replication_plot()?;
+    // partial_replication_plot()?;
     Ok(())
 }
 
@@ -421,12 +421,17 @@ fn tail_latency_plot() -> Result<(), Report> {
     let path = String::from("plot_tail_latency.pdf");
     let style_fun = None;
     let latency_precision = LatencyPrecision::Millis;
+    let y_bbox_to_anchor = Some(1.56);
+    // increase height
+    let height_adjust = Some(1.5);
     fantoch_plot::cdf_plot_split(
         top_searches,
         bottom_searches,
         x_range,
         style_fun,
         latency_precision,
+        y_bbox_to_anchor,
+        height_adjust,
         PLOT_DIR,
         &path,
         &db,
@@ -554,9 +559,11 @@ fn increasing_load_plot() -> Result<(), Report> {
     let y_axis = ThroughputYAxis::Latency(LatencyMetric::Average);
     let y_log_scale = true;
     let x_bbox_to_anchor = Some(0.46);
+    let y_bbox_to_anchor = Some(1.42);
     let legend_column_spacing = Some(1.25);
     let left_margin = None;
-    let width_reduction = None;
+    let width_adjust = None;
+    let height_adjust = Some(1.0);
     let path = String::from("plot_increasing_load.pdf");
     fantoch_plot::throughput_something_plot_split(
         n,
@@ -573,9 +580,11 @@ fn increasing_load_plot() -> Result<(), Report> {
         y_axis,
         y_log_scale,
         x_bbox_to_anchor,
+        y_bbox_to_anchor,
         legend_column_spacing,
         left_margin,
-        width_reduction,
+        width_adjust,
+        height_adjust,
         PLOT_DIR,
         &path,
         &db,
@@ -686,9 +695,11 @@ fn batching_plot() -> Result<(), Report> {
         let y_axis = ThroughputYAxis::Latency(LatencyMetric::Average);
         let y_log_scale = true;
         let x_bbox_to_anchor = None;
+        let y_bbox_to_anchor = None;
         let legend_column_spacing = None;
         let left_margin = None;
-        let width_reduction = None;
+        let width_adjust = None;
+        let height_adjust = None;
         let path = format!("plot_batching_{}_{}.pdf", batching, payload_size);
         let (max_throughputs, _) =
             fantoch_plot::throughput_something_plot_split(
@@ -706,9 +717,11 @@ fn batching_plot() -> Result<(), Report> {
                 y_axis,
                 y_log_scale,
                 x_bbox_to_anchor,
+                y_bbox_to_anchor,
                 legend_column_spacing,
                 left_margin,
-                width_reduction,
+                width_adjust,
+                height_adjust,
                 PLOT_DIR,
                 &path,
                 &db,
@@ -921,9 +934,11 @@ fn partial_replication_plot() -> Result<(), Report> {
             let latency_precision = LatencyPrecision::Millis;
             let y_log_scale = false;
             let x_bbox_to_anchor = Some(0.45);
+            let y_bbox_to_anchor = None;
             let legend_column_spacing = None;
             let left_margin = Some(0.15);
-            let width_reduction = Some(1.75);
+            let width_adjust = Some(-1.75);
+            let height_adjust = None;
             let path = format!(
                 "plot_partial_replication_{}_{}_k{}.pdf",
                 y_axis.name(),
@@ -948,9 +963,11 @@ fn partial_replication_plot() -> Result<(), Report> {
                 y_axis,
                 y_log_scale,
                 x_bbox_to_anchor,
+                y_bbox_to_anchor,
                 legend_column_spacing,
                 left_margin,
-                width_reduction,
+                width_adjust,
+                height_adjust,
                 PLOT_DIR,
                 &path,
                 &db,
@@ -1589,12 +1606,16 @@ fn multi_key_all() -> Result<(), Report> {
                                 .partition(|search| search.f == 1);
                         let x_range = None;
                         let style_fun = None;
+                        let y_bbox_to_anchor = None;
+                        let height_adjust = None;
                         fantoch_plot::cdf_plot_split(
                             top_searches,
                             bottom_searches,
                             x_range,
                             style_fun,
                             latency_precision,
+                            y_bbox_to_anchor,
+                            height_adjust,
                             PLOT_DIR,
                             &path,
                             &db,
@@ -1973,12 +1994,16 @@ fn single_key_all() -> Result<(), Report> {
                                 .partition(|search| search.f == 1);
                             let x_range = None;
                             let style_fun = None;
+                            let y_bbox_to_anchor = None;
+                            let height_adjust = None;
                             fantoch_plot::cdf_plot_split(
                                 top_searches,
                                 bottom_searches,
                                 x_range,
                                 style_fun,
                                 latency_precision,
+                                y_bbox_to_anchor,
+                                height_adjust,
                                 PLOT_DIR,
                                 &path,
                                 &db,
