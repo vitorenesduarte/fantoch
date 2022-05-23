@@ -10,5 +10,5 @@ sudo apt install python3-dev python3-venv python3-pip
 
 2. Install `matplotlib`
 ```bash
-pip3 install matplotlib
+pip3 install matplotlib==3.3.0
 ```

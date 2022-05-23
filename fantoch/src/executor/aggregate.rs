@@ -5,7 +5,6 @@ use crate::trace;
 use crate::HashMap;
 
 /// Structure that tracks the progress of pending commands.
-#[derive(Clone)]
 pub struct AggregatePending {
     process_id: ProcessId,
     shard_id: ShardId,

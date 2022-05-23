@@ -36,11 +36,11 @@ fn main() -> Result<(), Report> {
 
 #[allow(dead_code)]
 fn thesis() -> Result<(), Report> {
-    eurosys()?;
+    // eurosys()?;
     // fast_path_plot()?;
     // increasing_sites_plot()?;
     // nfr_plot()?;
-    // recovery_plot()?;
+    recovery_plot()?;
     Ok(())
 }
 
