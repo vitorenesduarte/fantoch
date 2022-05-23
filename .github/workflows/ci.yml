@@ -15,14 +15,13 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: nightly-2022-05-23
-          override: true
+          toolchain: stable
 
       - name: Test fantoch, fantoch_ps fantoch_bote
         run: cargo test --lib -p fantoch -p fantoch_ps -p fantoch_bote
         env:
           QUICKCHECK_TESTS: '10000'
-          RUSTFLAGS: '-Zinstrument-coverage'
+          RUSTFLAGS: '-Cinstrument-coverage'
           LLVM_PROFILE_FILE: '%p-%m.profraw'
         timeout-minutes: 60
 
