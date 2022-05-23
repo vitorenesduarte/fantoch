@@ -29,7 +29,7 @@ const LATENCY_AWS: &str = "../latency_aws/2020_06_05";
 // const LATENCY_AWS: &str = "../latency_aws/2021_02_13";
 
 // aws experiment config
-const LAUCH_MODE: LaunchMode = LaunchMode::OnDemand;
+const LAUNCH_MODE: LaunchMode = LaunchMode::OnDemand;
 // const SERVER_INSTANCE_TYPE: &str = "m5.4xlarge";
 const SERVER_INSTANCE_TYPE: &str = "c5.2xlarge";
 const CLIENT_INSTANCE_TYPE: &str = "m5.2xlarge";
@@ -1301,7 +1301,7 @@ async fn do_aws_bench(
     // setup aws machines
     let machines = fantoch_exp::testbed::aws::setup(
         launcher,
-        LAUCH_MODE,
+        LAUNCH_MODE,
         regions,
         shard_count,
         SERVER_INSTANCE_TYPE.to_string(),
