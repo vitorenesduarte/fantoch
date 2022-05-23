@@ -423,23 +423,40 @@ impl ResultsDB {
         global
     }
 
-    pub fn data_to_json<P: AsRef<Path>>(&self, output_dir: P) -> Result<(), Report> {
+    pub fn data_to_json<P: AsRef<Path>>(
+        &self,
+        output_dir: P,
+    ) -> Result<(), Report> {
         for (dir_entry, exp_config, exp_data) in &self.results {
             // ensure experiment dir exists
             let dir_entry_path = dir_entry.path();
-            let timestamp = dir_entry_path.file_name().expect("experiment result folder should have a name");
+            let timestamp = dir_entry_path
+                .file_name()
+                .expect("experiment result folder should have a name");
             let timestamp_dir = output_dir.as_ref().join(timestamp);
             std::fs::create_dir_all(&timestamp_dir)?;
 
             // save exp config
             let exp_config_path = timestamp_dir.join("exp_config.json");
-            fantoch_exp::serialize(exp_config, &exp_config_path, SerializationFormat::JsonPretty)
-                .wrap_err_with(|| format!("serialize exp config {:?}", exp_config_path))?;
+            fantoch_exp::serialize(
+                exp_config,
+                &exp_config_path,
+                SerializationFormat::JsonPretty,
+            )
+            .wrap_err_with(|| {
+                format!("serialize exp config {:?}", exp_config_path)
+            })?;
 
             // save experiment data
             let exp_data_path = timestamp_dir.join("exp_data.json");
-            fantoch_exp::serialize(exp_data, &exp_data_path, SerializationFormat::JsonPretty)
-                .wrap_err_with(|| format!("serialize exp data {:?}", exp_data_path))?;
+            fantoch_exp::serialize(
+                exp_data,
+                &exp_data_path,
+                SerializationFormat::JsonPretty,
+            )
+            .wrap_err_with(|| {
+                format!("serialize exp data {:?}", exp_data_path)
+            })?;
         }
         Ok(())
     }

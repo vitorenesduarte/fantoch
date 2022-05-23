@@ -47,21 +47,29 @@ pub struct Matplotlib<'p> {
 }
 
 impl<'p> Matplotlib<'p> {
-    pub fn new(py: Python<'p>) -> Result<Self, Report> {
-        // add custom font
-        let font_manager = pytry!(py, PyModule::import(py, "matplotlib.font_manager"));
-        let fonts : Vec<&str> = font_manager.call_method1("findSystemFonts", ("./fonts/",))?.extract()?;
-        for font in fonts {
-            font_manager.getattr("fontManager")?.call_method1("addfont", (font,))?;
-        }
-
+    pub fn new(py: Python<'p>, newsgott: bool) -> Result<Self, Report> {
         // create matplotlib
         let lib = pytry!(py, PyModule::import(py, "matplotlib"));
         let lib = Self { lib };
 
-        // set font
-        let kwargs = pydict!(py, ("family", "NewsGotT"));
-        lib.rc("font", Some(kwargs))?;
+        // maybe set NewsGotT as font
+        if newsgott {
+            // load font
+            let font_manager =
+                pytry!(py, PyModule::import(py, "matplotlib.font_manager"));
+            let fonts: Vec<&str> = font_manager
+                .call_method1("findSystemFonts", ("./fonts/",))?
+                .extract()?;
+            for font in fonts {
+                font_manager
+                    .getattr("fontManager")?
+                    .call_method1("addfont", (font,))?;
+            }
+
+            // set font
+            let kwargs = pydict!(py, ("family", "NewsGotT"));
+            lib.rc("font", Some(kwargs))?;
+        }
 
         Ok(lib)
     }

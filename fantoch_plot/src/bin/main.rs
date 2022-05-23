@@ -24,7 +24,8 @@ const ALL_DSTATS: bool = true;
 
 fn main() -> Result<(), Report> {
     // set global style
-    fantoch_plot::set_global_style()?;
+    let newsgott = true;
+    fantoch_plot::set_global_style(newsgott)?;
 
     // partial_replication_all()?;
     // multi_key()?;

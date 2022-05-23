@@ -172,12 +172,12 @@ enum AxisToScale {
 }
 
 #[cfg(feature = "pyo3")]
-pub fn set_global_style() -> Result<(), Report> {
+pub fn set_global_style(newsgott: bool) -> Result<(), Report> {
     // start python
     let gil = Python::acquire_gil();
     let py = gil.python();
 
-    let lib = Matplotlib::new(py)?;
+    let lib = Matplotlib::new(py, newsgott)?;
     // need to load `PyPlot` for the following to work
     let _ = PyPlot::new(py)?;
 
