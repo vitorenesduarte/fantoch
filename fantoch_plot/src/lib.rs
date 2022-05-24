@@ -50,7 +50,7 @@ const FIGSIZE: (f64, f64) = (FIGWIDTH, (FIGWIDTH / GOLDEN_RATIO) - 0.6);
 // - setting top to 0.80, means we leave the top 20% free
 // - setting bottom to 0.20, means we leave the bottom 20% free
 #[cfg(feature = "pyo3")]
-const ADJUST_TOP: f64 = 0.83;
+const ADJUST_TOP: f64 = 0.81;
 #[cfg(feature = "pyo3")]
 const ADJUST_BOTTOM: f64 = 0.15;
 
@@ -186,9 +186,9 @@ pub fn set_global_style(newsgott: bool) -> Result<(), Report> {
     lib.rc("figure", Some(kwargs))?;
 
     // adjust font size
-    let kwargs = pydict!(py, ("size", 8.5));
+    let kwargs = pydict!(py, ("size", 12));
     lib.rc("font", Some(kwargs))?;
-    let kwargs = pydict!(py, ("fontsize", 10));
+    let kwargs = pydict!(py, ("fontsize", 12));
     lib.rc("legend", Some(kwargs))?;
 
     // adjust font type to type 1
@@ -510,11 +510,12 @@ pub fn nfr_plot(
         None
     };
     let x_bbox_to_anchor = Some(0.46);
+    let y_bbox_to_anchor = Some(1.34);
     add_legend(
         plotted,
         Some(legends),
         x_bbox_to_anchor,
-        None,
+        y_bbox_to_anchor,
         legend_column_spacing,
         py,
         &ax,
@@ -546,6 +547,10 @@ where
 
     // start plot
     let (fig, ax) = start_plot(py, &plt, None)?;
+
+    // increase height
+    let (width, height) = FIGSIZE;
+    fig.set_size_inches(width, height + 0.23)?;
 
     // keep track of the number of plotted instances
     let mut plotted = 0;
@@ -638,7 +643,17 @@ where
     ax.set_ylabel("fast path (%)", None)?;
 
     // legend
-    add_legend(plotted, None, None, None, None, py, &ax)?;
+    let x_bbox_to_anchor = None;
+    let y_bbox_to_anchor = Some(1.345);
+    add_legend(
+        plotted,
+        None,
+        x_bbox_to_anchor,
+        y_bbox_to_anchor,
+        None,
+        py,
+        &ax,
+    )?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -865,11 +880,12 @@ pub fn increasing_sites_plot(
         None
     };
     let x_bbox_to_anchor = Some(0.46);
+    let y_bbox_to_anchor = Some(1.34);
     add_legend(
         plotted,
         Some(legends),
         x_bbox_to_anchor,
-        None,
+        y_bbox_to_anchor,
         legend_column_spacing,
         py,
         &ax,
@@ -1104,11 +1120,12 @@ pub fn fairness_plot<R>(
     let legend_column_spacing =
         if search_count == 7 { Some(1.25) } else { None };
     let x_bbox_to_anchor = Some(0.46);
+    let y_bbox_to_anchor = Some(1.34);
     add_legend(
         plotted,
         Some(legends),
         x_bbox_to_anchor,
-        None,
+        y_bbox_to_anchor,
         legend_column_spacing,
         py,
         &ax,
@@ -1775,7 +1792,7 @@ pub fn inter_machine_scalability_plot(
             format!("zipf = {}", coefficient)
         })
         .collect();
-    let fontdict = pydict!(py, ("fontsize", 7.5));
+    let fontdict = pydict!(py, ("fontsize", 9));
     let kwargs = pydict!(py, ("fontdict", fontdict));
     ax.set_xticklabels(labels, Some(kwargs))?;
 
@@ -1797,7 +1814,8 @@ pub fn inter_machine_scalability_plot(
     }
 
     // legend
-    add_legend(plotted, None, None, None, None, py, &ax)?;
+    let y_bbox_to_anchor = Some(1.35);
+    add_legend(plotted, None, None, y_bbox_to_anchor, None, py, &ax)?;
 
     // end plot
     end_plot(plotted > 0, output_dir, output_file, py, &plt, Some(fig))?;
@@ -2115,7 +2133,7 @@ where
 
     // increase height
     let (width, height) = FIGSIZE;
-    fig.set_size_inches(width, height - 0.8)?;
+    fig.set_size_inches(width, height - 0.6)?;
 
     for (subplot, set_xlabels, set_ylabels, set_colorbar, heatmap_metric) in vec![
         (1, true, true, false, HeatmapMetric::CPU),
@@ -2286,11 +2304,13 @@ where
     ax.set_xticks(xticks, None)?;
     // set ylabels
     if set_xlabels {
+        let fontdict = pydict!(py, ("fontsize", 10));
         let kwargs = pydict!(
             py,
             ("rotation", 50),
             ("horizontalalignment", "right"),
-            ("rotation_mode", "anchor")
+            ("rotation_mode", "anchor"),
+            ("fontdict", fontdict),
         );
         ax.set_xticklabels(clients_per_region.clone(), Some(kwargs))?;
     } else {
