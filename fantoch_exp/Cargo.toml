@@ -16,7 +16,7 @@ exp = ["futures", "rusoto_core", "rusoto_credential", "rusoto_ec2", "tracing-fut
 [dependencies]
 bincode = "1.3.3"
 color-eyre = "0.6.1"
-indicatif = "0.16.2"
+indicatif = "0.17.2"
 flate2 = "1.0.22"
 futures = { version = "0.3.21", default-features = false, features = [], optional = true }
 rusoto_core = { version = "0.46.0", optional = true }
