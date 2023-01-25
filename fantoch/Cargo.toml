@@ -13,7 +13,7 @@ max_level_debug = []
 max_level_trace = []
 
 [dependencies]
-ahash = "0.7.6"
+ahash = "0.8.3"
 bincode = "1.3.3"
 bytes = "1.1.0"
 color-eyre = "0.6.1"
