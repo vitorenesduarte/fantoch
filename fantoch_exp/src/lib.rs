@@ -113,6 +113,7 @@ impl FantochFeature {
 pub enum Protocol {
     AtlasLocked,
     EPaxosLocked,
+    EPaxos,
     CaesarLocked,
     FPaxos,
     TempoAtomic,
@@ -125,6 +126,7 @@ impl Protocol {
         match self {
             Protocol::AtlasLocked => "atlas_locked",
             Protocol::EPaxosLocked => "epaxos_locked",
+            Protocol::EPaxos => "epaxos",
             Protocol::CaesarLocked => "caesar_locked",
             Protocol::FPaxos => "fpaxos",
             Protocol::TempoAtomic => "tempo_atomic",

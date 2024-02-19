@@ -118,7 +118,7 @@ fn recovery_data(path: &str) -> Result<RecoveryData, Report> {
 #[allow(dead_code)]
 fn nfr_plot() -> Result<(), Report> {
     println!(">>>>>>>> NFR <<<<<<<<");
-    let results_dir = "/home/vitor.enes/thesis_results/results_nfr";
+    let results_dir = "/home/mari/thesis_results/results_nfr";
     // fixed parameters
     let key_gen = KeyGen::Zipf {
         total_keys_per_shard: 1_000_000,
@@ -166,7 +166,8 @@ fn nfr_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn fast_path_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAST PATH <<<<<<<<");
-    let results_dir = "/home/vitor.enes/thesis_results/results_fast_path";
+    //FIXMe:
+    let results_dir = "/home/mari/ola";
     // fixed parameters
     let conflict_rates = vec![0, 5, 10, 20, 40, 60, 80, 100];
     let payload_size = 100;
@@ -245,7 +246,7 @@ fn fast_path_plot() -> Result<(), Report> {
 fn increasing_sites_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING SITES <<<<<<<<");
     let results_dir =
-        "/home/vitor.enes/thesis_results/results_increasing_sites";
+        "/home/mari/thesis_results/results_increasing_sites";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -293,8 +294,9 @@ fn increasing_sites_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn fairness_plot() -> Result<(), Report> {
     println!(">>>>>>>> FAIRNESS <<<<<<<<");
+    //FIXME:
     let results_dir =
-        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
+        "/home/mari/eurosys_results/results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -375,8 +377,9 @@ fn fairness_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn tail_latency_plot() -> Result<(), Report> {
     println!(">>>>>>>> TAIL LATENCY <<<<<<<<");
+    //FIXME:
     let results_dir =
-        "/home/vitor.enes/eurosys_results/results_fairness_and_tail_latency";
+        "/home/mari/eurosys_results/results_fairness_and_tail_latency";
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
         conflict_rate: 2,
@@ -445,7 +448,7 @@ fn tail_latency_plot() -> Result<(), Report> {
 fn increasing_load_plot() -> Result<(), Report> {
     println!(">>>>>>>> INCREASING LOAD <<<<<<<<");
     let results_dir =
-        "/home/vitor.enes/eurosys_results/results_increasing_load";
+        "/home/mari/eurosys_results/results_fairness_and_tail_latency";
 
     // fixed parameters
     let top_key_gen = KeyGen::ConflictPool {
@@ -597,7 +600,7 @@ fn increasing_load_plot() -> Result<(), Report> {
 #[allow(dead_code)]
 fn batching_plot() -> Result<(), Report> {
     println!(">>>>>>>> BATCHING <<<<<<<<");
-    let results_dir = "/home/vitor.enes/eurosys_results/results_batching";
+    let results_dir = "/home/mari/eurosys_results/results_batching";
 
     // fixed parameters
     let key_gen = KeyGen::ConflictPool {
@@ -811,7 +814,7 @@ fn scalability_plot() -> Result<(), Report> {
 fn partial_replication_plot() -> Result<(), Report> {
     println!(">>>>>>>> PARTIAL REPLICATION <<<<<<<<");
     let results_dir =
-        "/home/vitor.enes/eurosys_results/results_partial_replication";
+        "/home/mari/eurosys_results/results_partial_replication";
     // fixed parameters
     let top_coefficient = 0.5;
     let bottom_coefficient = 0.7;

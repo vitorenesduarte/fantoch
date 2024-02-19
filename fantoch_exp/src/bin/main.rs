@@ -75,6 +75,7 @@ const PROTOCOLS_TO_CLEANUP: &[Protocol] = &[
     Protocol::TempoAtomic,
     Protocol::AtlasLocked,
     Protocol::EPaxosLocked,
+    Protocol::EPaxos,
     Protocol::FPaxos,
     Protocol::CaesarLocked,
 ];
@@ -295,6 +296,11 @@ async fn fast_path_plot() -> Result<(), Report> {
     }
 
     let mut experiments_to_skip = 0;
+
+    // let mut skip = |protocol, _, clients| {
+    //     // skip Atlas with more than 4096 clients
+    //     protocol == Protocol::EPaxosLocked && clients > 1024 * 20
+    // };
     let mut skip = |_, _, _| {
         if experiments_to_skip == 0 {
             false
@@ -309,6 +315,7 @@ async fn fast_path_plot() -> Result<(), Report> {
         (Protocol::TempoAtomic, true),
         (Protocol::AtlasLocked, true),
         (Protocol::EPaxosLocked, false),
+        (Protocol::EPaxos, false),
     ];
 
     let mut all_configs = Vec::new();
@@ -374,6 +381,46 @@ async fn fast_path_plot() -> Result<(), Report> {
             results_dir,
         )
         .await?;
+
+        // TEST LOCAL BENCH
+        // let clients_per_region = vec![1, 8];
+        // let batch_max_size = vec![1];
+        // let coefficients = vec![
+        //     // 0.5, 0.75, 1.0,
+        //     // 1.25, 1.5, 1.75,
+        //     2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
+        // ];
+        // let key_gens = coefficients.into_iter().map(|coefficient| KeyGen::Zipf {
+        //     total_keys_per_shard: 1_000_000,
+        //     coefficient,
+        // });
+
+        // let mut workloads = Vec::new();
+        // for key_gen in key_gens {
+        //     let workload = Workload::new(
+        //         shard_count,
+        //         key_gen,
+        //         keys_per_command,
+        //         COMMANDS_PER_CLIENT_LAN,
+        //         payload_size,
+        //     );
+        //     workloads.push(workload);
+        // }
+
+        // local_bench(
+        //     regions,
+        //     shard_count,
+        //     planet,
+        //     configs,
+        //     clients_per_region,
+        //     workloads,
+        //     batch_max_size,
+        //     cpus,
+        //     &mut skip,
+        //     &mut progress,
+        //     results_dir
+        // )
+        // .await?;
     }
     Ok(())
 }
