@@ -20,7 +20,8 @@ impl PlotFmt {
     pub fn protocol_name(protocol: Protocol) -> &'static str {
         match protocol {
             Protocol::AtlasLocked => "Atlas",
-            Protocol::EPaxosLocked => "EPaxos",
+            Protocol::EPaxosLocked => "EPaxosLocked",
+            Protocol::EPaxos=> "EPaxos",
             Protocol::CaesarLocked => "Caesar",
             Protocol::FPaxos => "FPaxos",
             Protocol::TempoAtomic => "Tempo",
@@ -44,6 +45,7 @@ impl PlotFmt {
             (Protocol::AtlasLocked, 2) => "#16a085",
             (Protocol::AtlasLocked, 3) => "#2980b9", // "#111111"
             (Protocol::EPaxosLocked, _) => "#444444",
+            (Protocol::EPaxos, _) => "#444444",
             (Protocol::CaesarLocked, _) => "#bdc3c7",
             (Protocol::FPaxos, 1) => "#2980b9",
             (Protocol::FPaxos, 2) => "#34495e",
@@ -122,6 +124,7 @@ impl PlotFmt {
         match (protocol, f) {
             (Protocol::AtlasLocked, _) => "--",
             (Protocol::EPaxosLocked, _) => ":",
+            (Protocol::EPaxos, _) => ":",
             (Protocol::CaesarLocked, _) => ":",
             (Protocol::FPaxos, _) => "-.",
             (Protocol::TempoAtomic, _) => "-",
