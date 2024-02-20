@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 // Definition of `Key` and `Value` types.
 pub type Key = String;
-pub type Value = String;
+pub type Value = u16;
 
 #[derive(
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -93,9 +93,9 @@ mod tests {
         // key and values
         let key_a = String::from("A");
         let key_b = String::from("B");
-        let x = String::from("x");
-        let y = String::from("y");
-        let z = String::from("z");
+        let x = 12;
+        let y = 10;
+        let z = 28;
 
         // store
         let monitor = false;
@@ -107,18 +107,18 @@ mod tests {
         assert_eq!(store.test_execute(&key_b, KVOp::Get), None);
 
         // put key_a x -> none
-        assert_eq!(store.test_execute(&key_a, KVOp::Put(x.clone())), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Put(x)), None);
         // get key_a    -> some(x)
-        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(x.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(x));
 
         // put key_b y -> none
-        assert_eq!(store.test_execute(&key_b, KVOp::Put(y.clone())), None);
+        assert_eq!(store.test_execute(&key_b, KVOp::Put(y)), None);
         // get key_b    -> some(y)
-        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y));
 
         // put key_a z -> some(x)
         assert_eq!(
-            store.test_execute(&key_a, KVOp::Put(z.clone())),
+            store.test_execute(&key_a, KVOp::Put(z)),
             None,
             /*
             the following is correct if Put returns the previous value
@@ -126,33 +126,33 @@ mod tests {
              */
         );
         // get key_a    -> some(z)
-        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(z.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(z));
         // get key_b    -> some(y)
-        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y));
 
         // delete key_a -> some(z)
-        assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(z.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(z));
         // get key_a    -> none
         assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
         // get key_b    -> some(y)
-        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Get), Some(y));
 
         // delete key_b -> some(y)
-        assert_eq!(store.test_execute(&key_b, KVOp::Delete), Some(y.clone()));
+        assert_eq!(store.test_execute(&key_b, KVOp::Delete), Some(y));
         // get key_b    -> none
         assert_eq!(store.test_execute(&key_b, KVOp::Get), None);
         // get key_a    -> none
         assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
 
         // put key_a x -> none
-        assert_eq!(store.test_execute(&key_a, KVOp::Put(x.clone())), None);
+        assert_eq!(store.test_execute(&key_a, KVOp::Put(x)), None);
         // get key_a    -> some(x)
-        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(x.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Get), Some(x));
         // get key_b    -> none
         assert_eq!(store.test_execute(&key_b, KVOp::Get), None);
 
         // delete key_a -> some(x)
-        assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(x.clone()));
+        assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(x));
         // get key_a    -> none
         assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
     }

@@ -9,6 +9,9 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::iter;
 
+const MAX_NUMBER: u16 = u16::MAX;
+const MIN_NUMBER: u16 = u16::MIN; 
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Workload {
     /// number of shards
@@ -138,6 +141,7 @@ impl Workload {
         self.command_count == self.commands_per_client
     }
 
+    /// FIXME: ADD a ADD and SUBTRACT Command
     /// Generate a command.
     fn gen_cmd(
         &mut self,
@@ -199,10 +203,13 @@ impl Workload {
     /// Generate a command payload with the payload size provided.
     fn gen_cmd_value(&self) -> Value {
         let mut rng = rand::thread_rng();
-        iter::repeat(())
-            .map(|_| rng.sample(Alphanumeric) as char)
-            .take(self.payload_size)
-            .collect()
+
+        rng.gen_range(MIN_NUMBER..=MAX_NUMBER)
+        // let mut rng = rand::thread_rng();
+        // iter::repeat(())
+        //     .map(|_| rng.sample(Alphanumeric) as char)
+        //     .take(self.payload_size)
+        //     .collect()
     }
 
     /// Computes which shard the key belongs to.
@@ -319,11 +326,13 @@ mod tests {
                 assert_eq!(ops.len(), 1);
                 let op = ops.pop().unwrap();
                 // check that the value size is `payload_size`
-                if let KVOp::Put(payload) = op {
-                    assert_eq!(payload.len(), payload_size);
-                } else {
-                    panic!("workload should generate PUT commands");
-                }
+                // FIXME: remove this because know we use u16 instead of String
+                // FIXME:: maybe remove payload_size
+                // if let KVOp::Put(payload) = op {
+                //     assert_eq!(payload.len(), payload_size);
+                // } else {
+                //     panic!("workload should generate PUT commands");
+                // }
 
                 // check total and issued commands
                 assert_eq!(workload.commands_per_client(), commands_per_client);

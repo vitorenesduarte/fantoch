@@ -306,7 +306,7 @@ mod tests {
                     .into_iter()
                     .collect(),
             );
-            let ops = Arc::new(vec![KVOp::Put(String::from(value))]);
+            let ops = Arc::new(vec![KVOp::Put(10)]);
             Pending::new(DEFAULT_SHARD_ID, rifl, shard_to_keys, ops)
         };
 
@@ -501,7 +501,7 @@ mod tests {
                     .into_iter()
                     .collect(),
             );
-            let ops = Arc::new(vec![KVOp::Put(String::from(value))]);
+            let ops = Arc::new(vec![KVOp::Put(10)]);
             Pending::new(DEFAULT_SHARD_ID, rifl, shard_to_keys, ops)
         };
 

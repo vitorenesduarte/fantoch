@@ -104,21 +104,21 @@ mod tests {
         // keys and commands
         let key_a = String::from("A");
         let key_b = String::from("B");
-        let foo = String::from("foo");
-        let bar = String::from("bar");
+        let foo = 10;
+        let bar = 12;
 
         // command put a
         let put_a_rifl = Rifl::new(1, 1);
         let put_a = Command::from(
             put_a_rifl,
-            vec![(key_a.clone(), KVOp::Put(foo.clone()))],
+            vec![(key_a.clone(), KVOp::Put(foo))],
         );
 
         // command put b
         let put_b_rifl = Rifl::new(2, 1);
         let put_b = Command::from(
             put_b_rifl,
-            vec![(key_b.clone(), KVOp::Put(bar.clone()))],
+            vec![(key_b.clone(), KVOp::Put(bar))],
         );
 
         // command get a and b

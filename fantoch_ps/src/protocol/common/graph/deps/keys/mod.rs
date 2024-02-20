@@ -8,6 +8,7 @@ mod locked;
 pub use locked::LockedKeyDeps;
 pub use sequential::SequentialKeyDeps;
 
+use fantoch::kvs::Value;
 use fantoch::command::Command;
 use fantoch::id::{Dot, ShardId};
 use fantoch::HashSet;
@@ -138,11 +139,11 @@ mod tests {
         )
     }
 
-    fn multi_put(rifl: Rifl, keys: Vec<String>, value: String) -> Command {
+    fn multi_put(rifl: Rifl, keys: Vec<String>, value: Value) -> Command {
         Command::from(
             rifl,
             keys.into_iter()
-                .map(|key| (key.clone(), KVOp::Put(value.clone()))),
+                .map(|key| (key.clone(), KVOp::Put(value))),
         )
     }
 
@@ -160,27 +161,27 @@ mod tests {
         let key_a = String::from("A");
         let key_b = String::from("B");
         let key_c = String::from("C");
-        let value = String::from("");
+        let value = 10;
 
         // command a
         let cmd_a_rifl = Rifl::new(100, 1); // client 100, 1st op
-        let cmd_a = multi_put(cmd_a_rifl, vec![key_a.clone()], value.clone());
+        let cmd_a = multi_put(cmd_a_rifl, vec![key_a.clone()], value);
 
         // command b
         let cmd_b_rifl = Rifl::new(101, 1); // client 101, 1st op
-        let cmd_b = multi_put(cmd_b_rifl, vec![key_b.clone()], value.clone());
+        let cmd_b = multi_put(cmd_b_rifl, vec![key_b.clone()], value);
 
         // command ab
         let cmd_ab_rifl = Rifl::new(102, 1); // client 102, 1st op
         let cmd_ab = multi_put(
             cmd_ab_rifl,
             vec![key_a.clone(), key_b.clone()],
-            value.clone(),
+            value,
         );
 
         // command c
         let cmd_c_rifl = Rifl::new(103, 1); // client 103, 1st op
-        let cmd_c = multi_put(cmd_c_rifl, vec![key_c.clone()], value.clone());
+        let cmd_c = multi_put(cmd_c_rifl, vec![key_c.clone()], value);
 
         // empty conf for A
         let conf = key_deps.cmd_deps(&cmd_a);
@@ -391,7 +392,7 @@ mod tests {
 
         // keys
         let key = String::from("A");
-        let value = String::from("");
+        let value = 10;
 
         // read
         let read_rifl = Rifl::new(100, 1); // client 100, 1st op

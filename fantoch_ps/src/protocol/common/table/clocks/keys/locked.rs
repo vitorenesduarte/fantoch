@@ -217,7 +217,7 @@ mod tests {
         // update command bump the clock
         let cmd = Command::from(
             rifl,
-            vec![(String::from("K"), KVOp::Put(String::new()))],
+            vec![(String::from("K"), KVOp::Put(12))],
         );
         let (clock, votes) = clocks.proposal(&cmd, 0);
         assert_eq!(clock, 1);

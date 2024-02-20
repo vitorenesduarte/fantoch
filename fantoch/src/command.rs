@@ -301,9 +301,10 @@ mod tests {
     use super::*;
 
     fn multi_put(rifl: Rifl, keys: Vec<String>) -> Command {
+        let value = rand::thread_rng().gen_range(0..Value::MAX);
         Command::from(
             rifl,
-            keys.into_iter().map(|key| (key.clone(), KVOp::Put(key))),
+            keys.into_iter().map(|key| (key.clone(), KVOp::Put(value))),
         )
     }
 

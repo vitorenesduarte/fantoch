@@ -143,17 +143,17 @@ mod tests {
         let key = String::from("a");
         let cmd_1 = Command::from(
             rifl_1,
-            vec![(key.clone(), KVOp::Put(String::from("1")))],
+            vec![(key.clone(), KVOp::Put(1))],
         );
         let cmd_2 = Command::from(rifl_2, vec![(key.clone(), KVOp::Get)]);
         let cmd_3 = Command::from(
             rifl_3,
-            vec![(key.clone(), KVOp::Put(String::from("2")))],
+            vec![(key.clone(), KVOp::Put(2))],
         );
         let cmd_4 = Command::from(rifl_4, vec![(key.clone(), KVOp::Get)]);
         let cmd_5 = Command::from(
             rifl_5,
-            vec![(key.clone(), KVOp::Put(String::from("3")))],
+            vec![(key.clone(), KVOp::Put(3))],
         );
         let cmd_6 = Command::from(rifl_6, vec![(key.clone(), KVOp::Get)]);
 
@@ -162,11 +162,11 @@ mod tests {
         //   executor
         let mut expected_results = BTreeMap::new();
         expected_results.insert(rifl_1, vec![None]);
-        expected_results.insert(rifl_2, vec![Some(String::from("1"))]);
+        expected_results.insert(rifl_2, vec![Some(1)]);
         expected_results.insert(rifl_3, vec![None]);
-        expected_results.insert(rifl_4, vec![Some(String::from("2"))]);
+        expected_results.insert(rifl_4, vec![Some(2)]);
         expected_results.insert(rifl_5, vec![None]);
-        expected_results.insert(rifl_6, vec![Some(String::from("3"))]);
+        expected_results.insert(rifl_6, vec![Some(3)]);
 
         // create execution info
         let ei_1 = SlotExecutionInfo::new(1, cmd_1);

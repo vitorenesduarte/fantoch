@@ -1,8 +1,10 @@
 #[cfg(test)]
 pub use tests::{gen_cmd, vclock};
 
+
 #[cfg(test)]
 mod tests {
+    use fantoch::kvs::Value;
     use fantoch::command::Command;
     use fantoch::id::ProcessId;
     use fantoch::id::Rifl;
@@ -40,7 +42,7 @@ mod tests {
             .map(|_| {
                 // select random key
                 let key = format!("{}", rng.gen_range(0..keys_number));
-                let value = String::from("");
+                let value = rng.gen_range(Value::MIN..Value::MAX);
                 (key, KVOp::Put(value))
             })
             .collect();

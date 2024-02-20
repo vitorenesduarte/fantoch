@@ -101,9 +101,11 @@ mod tests {
     }
 
     fn multi_put(rifl: Rifl, keys: Vec<String>) -> Command {
+        //FIXME:: random
+        let value = 10;
         Command::from(
             rifl,
-            keys.into_iter().map(|key| (key.clone(), KVOp::Put(key))),
+            keys.into_iter().map(|key| (key.clone(), KVOp::Put(value))),
         )
     }
 

@@ -204,30 +204,32 @@ mod tests {
         let shard_id = 0;
         let mut key_clocks = LockedKeyClocks::new(p1, shard_id);
 
+        let value = 10;
+
         // create command on key A
         let cmd_a = Command::from(
             Rifl::new(1, 1),
-            vec![(String::from("A"), KVOp::Put(String::new()))],
+            vec![(String::from("A"), KVOp::Put(value))],
         );
 
         // create command on key B
         let cmd_b = Command::from(
             Rifl::new(1, 1),
-            vec![(String::from("B"), KVOp::Put(String::new()))],
+            vec![(String::from("B"), KVOp::Put(value))],
         );
 
         // create command on key C
         let cmd_c = Command::from(
             Rifl::new(1, 1),
-            vec![(String::from("C"), KVOp::Put(String::new()))],
+            vec![(String::from("C"), KVOp::Put(value))],
         );
 
         // create command on keys A and C
         let cmd_ac = Command::from(
             Rifl::new(1, 1),
             vec![
-                (String::from("A"), KVOp::Put(String::new())),
-                (String::from("C"), KVOp::Put(String::new())),
+                (String::from("A"), KVOp::Put(value)),
+                (String::from("C"), KVOp::Put(value)),
             ],
         );
 

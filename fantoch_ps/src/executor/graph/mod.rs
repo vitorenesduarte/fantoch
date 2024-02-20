@@ -722,6 +722,8 @@ mod tests {
         let mut queue = DependencyGraph::new(process_id, shard_id, &config);
         let time = RunTime;
 
+        let value = 10;
+
         // create dots
         let dot_0 = Dot::new(1, 1);
         let dot_1 = Dot::new(2, 1);
@@ -729,14 +731,14 @@ mod tests {
         // cmd 0
         let cmd_0 = Command::from(
             Rifl::new(1, 1),
-            vec![(String::from("A"), KVOp::Put(String::new()))],
+            vec![(String::from("A"), KVOp::Put(value))],
         );
         let deps_0 = vec![dep(dot_1, shard_id)];
 
         // cmd 1
         let cmd_1 = Command::from(
             Rifl::new(2, 1),
-            vec![(String::from("A"), KVOp::Put(String::new()))],
+            vec![(String::from("A"), KVOp::Put(value))],
         );
         let deps_1 = vec![dep(dot_0, shard_id)];
 
@@ -1071,7 +1073,7 @@ mod tests {
                 BTreeSet::from_iter(vec![String::from("CONF")])
             });
             let ops = keys.into_iter().map(|key| {
-                let value = String::from("");
+                let value = 10;
                 (key, KVOp::Put(value))
             });
             let cmd = Command::from(rifl, ops);
@@ -1144,7 +1146,7 @@ mod tests {
             let rifl = Rifl::new(1, 1);
             Command::from(
                 rifl,
-                vec![(String::from("CONF"), KVOp::Put(String::new()))],
+                vec![(String::from("CONF"), KVOp::Put(2))],
             )
         };
 
