@@ -13,6 +13,8 @@ pub type Value = u16;
 pub enum KVOp {
     Get,
     Put(Value),
+    Add(Value),
+    Subtract(Value),
     Delete,
 }
 
@@ -77,6 +79,28 @@ impl KVStore {
             KVOp::Put(value) => {
                 // don't return the previous value
                 self.store.insert(key.clone(), value);
+                None
+            }
+            KVOp::Add(value) => {
+                // don't return the previous value
+                if let Some(old_value) = self.store.get(key).cloned() {
+                    let new_value =  old_value + value;
+                    self.store.insert(key.clone(), new_value);
+                    return Some(new_value)
+                }
+                None
+            }
+            KVOp::Subtract(value) => {
+                // don't return the previous value
+                if let Some(old_value) = self.store.get(key).cloned() {
+                    let new_value =  old_value - value;
+                    if  new_value > 0  {
+                        self.store.insert(key.clone(), new_value);
+                        return Some(new_value)
+                    } else {
+                        return None
+                    }
+                }
                 None
             }
             KVOp::Delete => self.store.remove(key),

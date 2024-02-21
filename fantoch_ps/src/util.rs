@@ -24,6 +24,7 @@ mod tests {
         )
     }
 
+    //TODO: Update to add ADD and SUBTRACT operations
     #[cfg(test)]
     // Generates a random `Command` with at most `max_keys_per_command` where
     // the number of keys is `keys_number`.
