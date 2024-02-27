@@ -4,13 +4,16 @@ use crate::id::{RiflGen, ShardId};
 use crate::kvs::{KVOp, Key, Value};
 use crate::trace;
 use crate::HashMap;
-use rand::distributions::Alphanumeric;
+use rand::distributions::{Distribution, WeightedIndex};
+use rand::thread_rng;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::iter;
 
 const MAX_NUMBER: u16 = u16::MAX;
 const MIN_NUMBER: u16 = u16::MIN; 
+
+// Put, Add, Subtract, Delete
+const WEIGHTED_KVO_WRITES: [u8;4] = [3,3,3,1];
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Workload {
@@ -141,7 +144,6 @@ impl Workload {
         self.command_count == self.commands_per_client
     }
 
-    /// FIXME: ADD a ADD and SUBTRACT Command
     /// Generate a command.
     fn gen_cmd(
         &mut self,
@@ -170,11 +172,22 @@ impl Workload {
                 // if read-only, the op is a `Get`
                 KVOp::Get
             } else {
-                // if not read-only, the op is a `Put`:
-                // - generate payload for `Put` op
+                // if not read-only, the op is a `Put`, `Add`, `Subtract` or ``Delete`:
+                // - generate payload for op
                 let value = self.gen_cmd_value();
-                KVOp::Put(value)
+
+                let mut rng = thread_rng();
+                let dist = WeightedIndex::new(&WEIGHTED_KVO_WRITES).unwrap();
+
+                match dist.sample(&mut rng) {
+                    0 => KVOp::Put(value),
+                    1 => KVOp::Add(value),
+                    2 => KVOp::Subtract(value),
+                    3 => KVOp::Delete,
+                    _ => unreachable!(),     
+                }
             };
+
             // compute key's shard and save op
             let shard_id = self.shard_id(&key);
             ops.entry(shard_id).or_default().insert(key, vec![op]);
@@ -221,7 +234,6 @@ impl Workload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kvs::KVOp;
 
     const POOL_SIZE: usize = 1;
     // since the pool size is 1, the conflict color must be the following
