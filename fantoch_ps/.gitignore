@@ -1,2 +1,3 @@
 .metrics*
 *.log
+results/*
