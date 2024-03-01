@@ -22,13 +22,13 @@ with open(sys.argv[1]) as f:
 
         # extract protocol name, n, f, and c
         parts = header.split(" ")
-        assert(parts[1] == "n")
-        assert(parts[4] == "f")
-        assert(parts[7] == "c")
+        assert(parts[3] == "n")
+        assert(parts[6] == "f")
+        assert(parts[9] == "c")
         protocol = parts[0]
-        n = int(parts[3])
-        f = int(parts[6])
-        c = int(parts[9])
+        n = int(parts[5])
+        f = int(parts[8])
+        c = int(parts[11])
 
         # append in the order we want them sorted
         data.append((n, c, protocol, f, hist))
