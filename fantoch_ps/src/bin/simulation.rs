@@ -168,8 +168,8 @@ fn tempo(aws: bool) {
     let conflicts = vec![0, 2, 10, 30, 50, 100];
     let clients_per_region = vec![
         32,
-        // 512,
-        // 1024,
+        512,
+        1024,
         // 1024 * 2,
         // 1024 * 4,
         // 1024 * 8,
