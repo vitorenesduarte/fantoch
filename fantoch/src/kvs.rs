@@ -84,21 +84,19 @@ impl KVStore {
             KVOp::Add(value) => {
                 // don't return the previous value
                 if let Some(old_value) = self.store.get(key).cloned() {
-                    let new_value =  old_value + value;
-                    self.store.insert(key.clone(), new_value);
-                    return Some(new_value)
+                    if let Some(new_value) = old_value.checked_add(value) {
+                        self.store.insert(key.clone(), new_value);
+                        return Some(new_value)
+                    }
                 }
                 None
             }
             KVOp::Subtract(value) => {
                 // don't return the previous value
                 if let Some(old_value) = self.store.get(key).cloned() {
-                    let new_value =  old_value - value;
-                    if  new_value > 0  {
+                    if let Some(new_value) = old_value.checked_sub(value) { 
                         self.store.insert(key.clone(), new_value);
                         return Some(new_value)
-                    } else {
-                        return None
                     }
                 }
                 None
