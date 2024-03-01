@@ -177,7 +177,7 @@ fn tempo(aws: bool) {
         1024 * 20,
     ];
     let pool_sizes = vec![1];
-    let conflicts = vec![100000000];
+    let conflicts = vec![100131];
 
     ns.into_par_iter().for_each(|n| {
         let regions: Vec<_> = regions.clone().into_iter().take(n).collect();
