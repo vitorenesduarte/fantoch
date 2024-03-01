@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug};
 use std::iter::FromIterator;
 use std::sync::Arc;
+use rand::Rng;
+use crate::kvs::Value;
 
 pub const DEFAULT_SHARD_ID: ShardId = 0;
 

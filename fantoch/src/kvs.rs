@@ -83,22 +83,38 @@ impl KVStore {
             }
             KVOp::Add(value) => {
                 // don't return the previous value
-                if let Some(old_value) = self.store.get(key).cloned() {
-                    if let Some(new_value) = old_value.checked_add(value) {
-                        self.store.insert(key.clone(), new_value);
-                        return Some(new_value)
+                if let Some(old_value) = self.store.get_mut(key) {
+                    // In case the sum overflows, we will put the maximum possible value
+                    return match old_value.checked_add(value) {
+                        Some(new_value) => {
+                            *old_value = new_value;
+                            Some(new_value)
+                        },
+                        None => {
+                            let new_value = Value::MAX;
+                            *old_value = new_value;
+                            Some(new_value)
+                        }
                     }
-                }
+                } 
                 None
             }
             KVOp::Subtract(value) => {
                 // don't return the previous value
-                if let Some(old_value) = self.store.get(key).cloned() {
-                    if let Some(new_value) = old_value.checked_sub(value) { 
-                        self.store.insert(key.clone(), new_value);
-                        return Some(new_value)
+                if let Some(old_value) = self.store.get_mut(key) {
+                    // In case the subtraction overflows, we will put the minimum possible value
+                    return match old_value.checked_sub(value) {
+                        Some(new_value) => {
+                            *old_value = new_value;
+                            Some(new_value)
+                        },
+                        None => {
+                            let new_value = Value::MIN;
+                            *old_value = new_value;
+                            Some(new_value)
+                        }
                     }
-                }
+                } 
                 None
             }
             KVOp::Delete => self.store.remove(key),
@@ -108,6 +124,8 @@ impl KVStore {
 
 #[cfg(test)]
 mod tests {
+    use serde::de::value;
+
     use super::*;
 
     #[test]
@@ -177,5 +195,72 @@ mod tests {
         assert_eq!(store.test_execute(&key_a, KVOp::Delete), Some(x));
         // get key_a    -> none
         assert_eq!(store.test_execute(&key_a, KVOp::Get), None);
+    }
+
+
+    #[test]
+    fn add_flow() {
+        // store
+        let monitor = false;
+        let mut store = KVStore::new(monitor);
+
+        let key_c = String::from("Add");
+        let value_x = 12;
+        let value_y = 10;
+
+        // put key_c value_x -> 12
+        assert_eq!(store.test_execute(&key_c, KVOp::Put(value_x)), None);
+        // add key_a value_y -> some(value_x + value_y)
+        assert_eq!(store.test_execute(&key_c, KVOp::Add(value_y)), Some(value_x + value_y));
+
+        // add key_a Maximum_value -> some(MAX)
+        assert_eq!(store.test_execute(&key_c, KVOp::Add(Value::MAX)), Some(Value::MAX));
+    }
+
+    #[test]
+    fn subtract_flow() {
+        // store
+        let monitor = false;
+        let mut store = KVStore::new(monitor);
+
+        let key_c = String::from("Add");
+        let value_x = 12;
+        let value_y = 10;
+
+        // put key_c value_x -> None
+        assert_eq!(store.test_execute(&key_c, KVOp::Put(value_x)), None);
+        // subtract key_a value_y -> some(value_x - value_y)
+        assert_eq!(store.test_execute(&key_c, KVOp::Subtract(value_y)), Some(value_x - value_y));
+
+        // subtract key_a Maximum_Value -> some(MIM)
+        assert_eq!(store.test_execute(&key_c, KVOp::Subtract(Value::MAX)), Some(Value::MIN));
+    }
+
+    #[test]
+    fn add_and_subtract_flow() {
+        // store
+        let monitor = false;
+        let mut store = KVStore::new(monitor);
+
+        let key_c = String::from("Add");
+        let value_x = 12;
+        let value_y = 10;
+
+        // put key_c value_x -> 12
+        assert_eq!(store.test_execute(&key_c, KVOp::Put(value_x)), None);
+        // add key_a value_y -> some(value_x + value_y)
+        assert_eq!(store.test_execute(&key_c, KVOp::Add(value_y)), Some(value_x + value_y));
+
+        // subtract key_a value_x -> some(value_y)
+        assert_eq!(store.test_execute(&key_c, KVOp::Subtract(value_x)), Some(value_y));
+
+        // add key_a Maximum_value -> some(MAX)
+        assert_eq!(store.test_execute(&key_c, KVOp::Add(Value::MAX)), Some(Value::MAX));
+
+        // subtract key_a value_x -> some(MAX - value_x)
+        assert_eq!(store.test_execute(&key_c, KVOp::Subtract(value_x)), Some(Value::MAX - value_x));
+
+        // subtract key_a Maximum_Value -> some(MIM)
+        assert_eq!(store.test_execute(&key_c, KVOp::Subtract(Value::MAX)), Some(Value::MIN));
     }
 }
